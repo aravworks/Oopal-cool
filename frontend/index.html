@@ -1,0 +1,2092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MindEase — Your Mental Wellness Space</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ── TOKENS ──────────────────────────────────────────── */
+  :root {
+    /* Default calm palette — user-customisable later */
+    --c-bg:        #F0F4F8;
+    --c-surface:   #FFFFFF;
+    --c-primary:   #7B9EA6;   /* muted teal — calm, not clinical */
+    --c-accent:    #A89BC2;   /* soft lavender */
+    --c-warm:      #E8C5A0;   /* warm sand */
+    --c-text:      #2D3748;
+    --c-muted:     #718096;
+    --c-border:    #E2E8F0;
+    --c-danger:    #E53E3E;
+    --c-success:   #38A169;
+
+    --r-card:      16px;
+    --r-pill:      999px;
+    --shadow-sm:   0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md:   0 4px 16px rgba(0,0,0,0.08);
+    --shadow-lg:   0 8px 32px rgba(0,0,0,0.10);
+
+    --font-display: 'DM Serif Display', serif;
+    --font-body:    'Inter', sans-serif;
+    --font-mono:    'JetBrains Mono', monospace;
+
+    --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* User-chosen theme overlays */
+  body.theme-pink   { --c-primary:#C97B8C; --c-accent:#E8A0B0; --c-warm:#F5D0D8; }
+  body.theme-sage   { --c-primary:#6B8E7A; --c-accent:#A8C4B0; --c-warm:#D4EAD8; }
+  body.theme-sky    { --c-primary:#5B8DB8; --c-accent:#90B8D8; --c-warm:#C8DFF0; }
+  body.theme-sand   { --c-primary:#8B7355; --c-accent:#C4A882; --c-warm:#EDD9BC; }
+
+  /* Panic mode */
+  body.panic-mode * { animation: none !important; transition: none !important; }
+  body.panic-mode { background: #F7F9FA !important; }
+  body.panic-mode .page-landing,
+  body.panic-mode .page-dashboard { display: none !important; }
+  body.panic-mode .page-panic { display: flex !important; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--c-bg);
+    color: var(--c-text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── PAGES ───────────────────────────────────────────── */
+  .page { min-height: 100vh; }
+  .page-landing   { display: block; }
+  .page-onboarding{ display: none; }
+  .page-dashboard { display: none; }
+  .page-panic     { display: none; flex-direction: column; align-items: center;
+                    justify-content: center; min-height: 100vh; padding: 40px 24px; }
+
+  /* ── FLOATING PANIC BUTTON ───────────────────────────── */
+  .panic-btn {
+    position: fixed;
+    bottom: 28px; right: 28px;
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: var(--c-surface);
+    border: 2px solid var(--c-danger);
+    color: var(--c-danger);
+    font-size: 22px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow-md);
+    z-index: 10000;
+    transition: transform var(--transition), box-shadow var(--transition);
+  }
+  .panic-btn:hover { transform: scale(1.08); box-shadow: var(--shadow-lg); }
+  .panic-btn title-attr { display: none; }
+
+  /* ── NAVBAR ──────────────────────────────────────────── */
+  nav {
+    position: sticky; top: 0;
+    background: rgba(240,244,248,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--c-border);
+    padding: 0 32px;
+    height: 60px;
+    display: flex; align-items: center; justify-content: space-between;
+    z-index: 100;
+  }
+  .nav-logo {
+    font-family: var(--font-display);
+    font-size: 22px;
+    color: var(--c-primary);
+    letter-spacing: -0.5px;
+  }
+  .nav-logo span { color: var(--c-accent); }
+  .nav-actions { display: flex; gap: 12px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 8px;
+         padding: 9px 20px; border-radius: var(--r-pill);
+         font-family: var(--font-body); font-size: 14px; font-weight: 500;
+         cursor: pointer; border: none; transition: all var(--transition); }
+  .btn-ghost { background: transparent; color: var(--c-muted); }
+  .btn-ghost:hover { background: var(--c-border); color: var(--c-text); }
+  .btn-primary { background: var(--c-primary); color: #fff; }
+  .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+  .btn-outline { background: transparent; border: 1.5px solid var(--c-primary);
+                 color: var(--c-primary); }
+  .btn-outline:hover { background: var(--c-primary); color: #fff; }
+  .btn-accent { background: var(--c-accent); color: #fff; }
+  .btn-accent:hover { opacity: 0.88; }
+  .btn-warm { background: var(--c-warm); color: var(--c-text); }
+  .btn-danger { background: var(--c-danger); color: #fff; }
+
+  /* ── LANDING ─────────────────────────────────────────── */
+  .hero {
+    max-width: 960px; margin: 0 auto;
+    padding: 80px 32px 64px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 64px;
+    align-items: center;
+  }
+  .hero-eyebrow {
+    font-family: var(--font-mono); font-size: 12px; font-weight: 500;
+    color: var(--c-accent); letter-spacing: 2px; text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .hero h1 {
+    font-family: var(--font-display);
+    font-size: clamp(36px, 5vw, 52px);
+    line-height: 1.15;
+    color: var(--c-text);
+    margin-bottom: 20px;
+  }
+  .hero h1 em { color: var(--c-primary); font-style: italic; }
+  .hero p { font-size: 16px; color: var(--c-muted); line-height: 1.7; margin-bottom: 32px; }
+  .hero-cta { display: flex; gap: 12px; flex-wrap: wrap; }
+
+  /* Ambient orb — the signature visual element */
+  .orb-container {
+    position: relative; width: 100%; padding-top: 100%;
+  }
+  .orb {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%,
+      var(--c-warm) 0%,
+      var(--c-accent) 45%,
+      var(--c-primary) 100%);
+    opacity: 0.75;
+    animation: orb-breathe 6s ease-in-out infinite;
+    filter: blur(2px);
+  }
+  .orb::after {
+    content: '';
+    position: absolute; inset: 12%;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 40%, rgba(255,255,255,0.6), transparent 70%);
+  }
+  @keyframes orb-breathe {
+    0%,100% { transform: scale(1); filter: blur(2px); }
+    50%      { transform: scale(1.06); filter: blur(3px); }
+  }
+  .orb-text {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-size: 18px; font-style: italic;
+    color: rgba(255,255,255,0.9); text-align: center; padding: 20%;
+    line-height: 1.4;
+  }
+
+  /* Feature strip */
+  .features-strip {
+    background: var(--c-surface);
+    border-top: 1px solid var(--c-border);
+    border-bottom: 1px solid var(--c-border);
+    padding: 48px 32px;
+  }
+  .features-strip-inner {
+    max-width: 960px; margin: 0 auto;
+  }
+  .features-strip h2 {
+    font-family: var(--font-display); font-size: 28px;
+    margin-bottom: 36px; color: var(--c-text);
+  }
+  .features-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+  }
+  .feature-card {
+    background: var(--c-bg);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-card);
+    padding: 24px;
+    transition: transform var(--transition), box-shadow var(--transition);
+  }
+  .feature-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+  .feature-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--c-primary); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; margin-bottom: 16px;
+  }
+  .feature-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+  .feature-card p  { font-size: 13px; color: var(--c-muted); line-height: 1.6; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: var(--r-pill);
+    font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
+    text-transform: uppercase; margin-top: 10px;
+  }
+  .badge-ai     { background: #EBF4FF; color: #3182CE; }
+  .badge-live   { background: #F0FFF4; color: #38A169; }
+  .badge-safety { background: #FFF5F5; color: #E53E3E; }
+  .badge-ml     { background: #FAF5FF; color: #805AD5; }
+
+  /* Assessment teaser */
+  .assessment-teaser {
+    max-width: 960px; margin: 0 auto; padding: 64px 32px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center;
+  }
+  .assessment-card {
+    background: var(--c-surface);
+    border-radius: var(--r-card);
+    padding: 32px;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--c-border);
+  }
+  .q-label {
+    font-family: var(--font-mono); font-size: 11px; color: var(--c-accent);
+    letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;
+  }
+  .q-text { font-size: 18px; font-weight: 500; margin-bottom: 20px; }
+  .q-options { display: flex; flex-direction: column; gap: 8px; }
+  .q-option {
+    padding: 12px 16px; border-radius: 10px;
+    border: 1.5px solid var(--c-border);
+    font-size: 14px; cursor: pointer;
+    transition: all var(--transition);
+    text-align: left; background: var(--c-bg);
+  }
+  .q-option:hover, .q-option.selected {
+    border-color: var(--c-primary);
+    background: var(--c-primary);
+    color: #fff;
+  }
+  .q-progress {
+    display: flex; gap: 6px; margin-bottom: 20px;
+  }
+  .q-dot {
+    height: 4px; border-radius: 2px; background: var(--c-border);
+    flex: 1; transition: background var(--transition);
+  }
+  .q-dot.active { background: var(--c-primary); }
+
+  /* ── ONBOARDING — Theme Picker ────────────────────────── */
+  .onboarding-wrap {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 40px 24px;
+  }
+  .onboarding-card {
+    background: var(--c-surface); border-radius: 24px;
+    padding: 48px; max-width: 520px; width: 100%;
+    box-shadow: var(--shadow-lg); text-align: center;
+  }
+  .onboarding-card h2 {
+    font-family: var(--font-display); font-size: 30px; margin-bottom: 10px;
+  }
+  .onboarding-card p { color: var(--c-muted); margin-bottom: 32px; }
+  .theme-picker { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 32px; }
+  .theme-swatch {
+    width: 72px; height: 72px; border-radius: 50%; cursor: pointer;
+    border: 3px solid transparent;
+    transition: transform var(--transition), border-color var(--transition);
+    position: relative;
+  }
+  .theme-swatch:hover { transform: scale(1.1); }
+  .theme-swatch.chosen { border-color: var(--c-text); }
+  .theme-swatch::after {
+    content: attr(data-label);
+    position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%);
+    font-size: 11px; color: var(--c-muted); white-space: nowrap;
+  }
+  .swatch-teal  { background: radial-gradient(circle at 35% 35%, #A8D0D8, #7B9EA6); }
+  .swatch-pink  { background: radial-gradient(circle at 35% 35%, #F0B8C4, #C97B8C); }
+  .swatch-sage  { background: radial-gradient(circle at 35% 35%, #B8D4BC, #6B8E7A); }
+  .swatch-sky   { background: radial-gradient(circle at 35% 35%, #B0CDE8, #5B8DB8); }
+  .swatch-sand  { background: radial-gradient(circle at 35% 35%, #E8D0B0, #8B7355); }
+
+  /* ── DASHBOARD ───────────────────────────────────────── */
+  .dashboard-layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    min-height: calc(100vh - 60px);
+  }
+
+  /* Sidebar */
+  .sidebar {
+    background: var(--c-surface);
+    border-right: 1px solid var(--c-border);
+    padding: 24px 16px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .sidebar-section {
+    font-family: var(--font-mono); font-size: 10px; color: var(--c-muted);
+    letter-spacing: 1.5px; text-transform: uppercase;
+    padding: 16px 12px 8px; margin-top: 8px;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; border-radius: 10px;
+    font-size: 14px; font-weight: 500; cursor: pointer;
+    color: var(--c-muted); transition: all var(--transition);
+    border: none; background: none; width: 100%; text-align: left;
+  }
+  .nav-item:hover { background: var(--c-bg); color: var(--c-text); }
+  .nav-item.active { background: var(--c-primary); color: #fff; }
+  .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+  .nav-badge {
+    margin-left: auto; background: var(--c-accent); color: #fff;
+    font-size: 10px; padding: 1px 7px; border-radius: var(--r-pill);
+  }
+
+  /* Main content */
+  .main-content { padding: 32px; overflow-y: auto; }
+
+  .greeting {
+    margin-bottom: 28px;
+  }
+  .greeting h2 {
+    font-family: var(--font-display); font-size: 28px; margin-bottom: 4px;
+  }
+  .greeting p { color: var(--c-muted); font-size: 15px; }
+
+  /* Mood bar */
+  .mood-bar {
+    background: var(--c-surface); border-radius: var(--r-card);
+    padding: 20px 24px; margin-bottom: 24px;
+    border: 1px solid var(--c-border);
+    display: flex; align-items: center; gap: 20px;
+    flex-wrap: wrap;
+  }
+  .mood-bar p { font-size: 14px; font-weight: 500; }
+  .mood-emojis { display: flex; gap: 8px; }
+  .mood-emoji {
+    font-size: 26px; cursor: pointer; border-radius: 50%;
+    width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+    transition: transform var(--transition), background var(--transition);
+    background: var(--c-bg);
+  }
+  .mood-emoji:hover, .mood-emoji.active {
+    transform: scale(1.2); background: var(--c-warm);
+  }
+
+  /* Dashboard grid */
+  .dash-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  .dash-card {
+    background: var(--c-surface);
+    border-radius: var(--r-card);
+    border: 1px solid var(--c-border);
+    padding: 24px;
+    transition: transform var(--transition), box-shadow var(--transition);
+  }
+  .dash-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+  .dash-card.span-2 { grid-column: span 2; }
+  .dash-card.span-3 { grid-column: span 3; }
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--c-muted);
+                text-transform: uppercase; letter-spacing: 0.5px; }
+  .card-icon  { font-size: 20px; }
+
+  /* Session card */
+  .session-card {
+    background: linear-gradient(135deg, var(--c-primary), var(--c-accent));
+    color: #fff; border: none;
+  }
+  .session-card .card-title { color: rgba(255,255,255,0.75); }
+  .session-card h3 { font-family: var(--font-display); font-size: 22px; margin-bottom: 8px; }
+  .session-card p  { font-size: 13px; opacity: 0.85; margin-bottom: 20px; }
+  .session-card .btn { background: rgba(255,255,255,0.2); color: #fff;
+                       border: 1px solid rgba(255,255,255,0.3); }
+  .session-card .btn:hover { background: rgba(255,255,255,0.35); }
+
+  /* Mood chart */
+  .mood-chart { display: flex; align-items: flex-end; gap: 8px; height: 80px; }
+  .mood-bar-item {
+    flex: 1; border-radius: 4px 4px 0 0;
+    background: var(--c-primary); opacity: 0.5;
+    transition: opacity var(--transition);
+    position: relative;
+  }
+  .mood-bar-item:hover { opacity: 1; }
+  .mood-bar-item.today { opacity: 1; background: var(--c-accent); }
+  .chart-labels { display: flex; gap: 8px; margin-top: 8px; }
+  .chart-label { flex: 1; text-align: center; font-size: 10px; color: var(--c-muted); }
+
+  /* Insight list */
+  .insight-item {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--c-border);
+    font-size: 13px;
+  }
+  .insight-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .insight-item .date { font-size: 11px; color: var(--c-muted); margin-bottom: 4px;
+                        font-family: var(--font-mono); }
+  .insight-item .text { color: var(--c-text); line-height: 1.5; }
+  .insight-item .condition-chip {
+    display: inline-block; padding: 1px 8px;
+    border-radius: var(--r-pill); font-size: 10px; font-weight: 600;
+    margin-top: 6px;
+  }
+  .chip-anxiety { background: #EBF8FF; color: #2B6CB0; }
+  .chip-adhd    { background: #FAF5FF; color: #6B46C1; }
+  .chip-stress  { background: #F0FFF4; color: #276749; }
+
+  /* Therapist finder */
+  .therapist-card {
+    display: flex; gap: 16px; align-items: flex-start;
+    padding: 16px 0; border-bottom: 1px solid var(--c-border);
+  }
+  .therapist-card:last-child { border-bottom: none; }
+  .t-avatar {
+    width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--c-warm), var(--c-accent));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .t-info h4 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+  .t-info p  { font-size: 12px; color: var(--c-muted); margin-bottom: 6px; }
+  .t-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .t-tag {
+    padding: 2px 8px; border-radius: var(--r-pill);
+    font-size: 10px; background: var(--c-bg); color: var(--c-muted);
+    border: 1px solid var(--c-border);
+  }
+  .t-rating { margin-left: auto; font-size: 13px; font-weight: 600; color: #D97706;
+              white-space: nowrap; flex-shrink: 0; }
+
+  /* Map placeholder */
+  .map-placeholder {
+    background: linear-gradient(135deg, #E8F4F8, #D4E8F0);
+    border-radius: 12px; height: 140px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; color: var(--c-muted);
+    border: 1px dashed var(--c-primary); margin-top: 16px;
+    flex-direction: column; gap: 6px;
+  }
+  .map-placeholder .map-icon { font-size: 28px; }
+
+  /* Voice recorder */
+  .voice-recorder {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 12px; padding: 8px 0;
+  }
+  .mic-btn {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: var(--c-primary); color: #fff; border: none;
+    font-size: 28px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow-md);
+    transition: all var(--transition);
+    position: relative;
+  }
+  .mic-btn:hover { transform: scale(1.05); background: var(--c-accent); }
+  .mic-btn.recording {
+    background: var(--c-danger);
+    animation: pulse-record 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse-record {
+    0%,100% { box-shadow: 0 0 0 0 rgba(229,62,62,0.4); }
+    50%      { box-shadow: 0 0 0 16px rgba(229,62,62,0); }
+  }
+  .voice-waveform {
+    display: flex; align-items: center; gap: 3px; height: 32px;
+  }
+  .wave-bar {
+    width: 3px; border-radius: 2px; background: var(--c-primary);
+    animation: wave 1.2s ease-in-out infinite;
+  }
+  .wave-bar:nth-child(1) { height: 8px;  animation-delay: 0.0s; }
+  .wave-bar:nth-child(2) { height: 18px; animation-delay: 0.1s; }
+  .wave-bar:nth-child(3) { height: 26px; animation-delay: 0.2s; }
+  .wave-bar:nth-child(4) { height: 14px; animation-delay: 0.3s; }
+  .wave-bar:nth-child(5) { height: 22px; animation-delay: 0.4s; }
+  .wave-bar:nth-child(6) { height: 10px; animation-delay: 0.5s; }
+  .wave-bar:nth-child(7) { height: 18px; animation-delay: 0.6s; }
+  @keyframes wave {
+    0%,100% { transform: scaleY(1); }
+    50%      { transform: scaleY(0.4); }
+  }
+  .voice-status { font-size: 12px; color: var(--c-muted); text-align: center; }
+
+  /* SER indicator */
+  .ser-indicator {
+    background: var(--c-bg); border-radius: 10px; padding: 12px;
+    display: flex; gap: 12px; align-items: center; width: 100%;
+  }
+  .ser-bar-wrap { flex: 1; }
+  .ser-label { font-size: 11px; color: var(--c-muted); margin-bottom: 4px; }
+  .ser-bar { height: 6px; border-radius: 3px; background: var(--c-border); overflow: hidden; }
+  .ser-fill { height: 100%; border-radius: 3px; transition: width 1s ease; }
+  .ser-calm    { background: var(--c-success); width: 72%; }
+  .ser-anxiety { background: var(--c-accent);  width: 24%; }
+  .ser-fatigue { background: var(--c-warm);    width: 18%; }
+
+  /* Crisis banner */
+  .crisis-banner {
+    background: #FFF5F5; border: 1.5px solid #FEB2B2;
+    border-radius: var(--r-card); padding: 20px; display: none;
+  }
+  .crisis-banner.show { display: block; }
+  .crisis-banner h4 { color: var(--c-danger); font-size: 15px; margin-bottom: 8px; }
+  .crisis-banner p  { font-size: 13px; color: #C53030; margin-bottom: 14px; }
+  .crisis-numbers { display: flex; gap: 10px; flex-wrap: wrap; }
+  .crisis-num {
+    padding: 8px 16px; border-radius: var(--r-pill);
+    background: var(--c-danger); color: #fff;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    border: none; transition: opacity var(--transition);
+  }
+  .crisis-num:hover { opacity: 0.85; }
+
+  /* PDF export button */
+  .export-row {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .export-preview {
+    background: var(--c-bg); border: 1px solid var(--c-border);
+    border-radius: 10px; padding: 16px; font-size: 12px;
+    color: var(--c-muted); line-height: 1.8; flex: 1;
+    font-family: var(--font-mono);
+  }
+
+  /* ── PANIC SCREEN ─────────────────────────────────────── */
+  .panic-orb {
+    width: min(280px, 60vw); height: min(280px, 60vw); border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #B2D8E8, #7BAEC0);
+    animation: orb-breathe 4s ease-in-out infinite;
+    margin-bottom: 40px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 48px;
+  }
+  .panic-instruction {
+    font-family: var(--font-display); font-size: 26px;
+    color: var(--c-text); margin-bottom: 12px; text-align: center;
+  }
+  .panic-sub { font-size: 15px; color: var(--c-muted); text-align: center; margin-bottom: 32px; }
+  .breathing-steps {
+    display: flex; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; justify-content: center;
+  }
+  .breath-step {
+    padding: 10px 20px; border-radius: var(--r-pill);
+    background: var(--c-surface); border: 1.5px solid var(--c-border);
+    font-size: 14px; color: var(--c-muted);
+  }
+  .breath-step.active-breath {
+    background: var(--c-primary); color: #fff; border-color: var(--c-primary);
+  }
+  .panic-counter {
+    font-family: var(--font-mono); font-size: 48px; font-weight: 500;
+    color: var(--c-primary); margin-bottom: 32px;
+  }
+
+  /* ── STREAK TRACKER ─────────────────────────────────── */
+  .streak-row {
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .streak-day {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 600;
+    border: 1.5px solid var(--c-border);
+    background: var(--c-bg); color: var(--c-muted);
+    transition: all var(--transition);
+  }
+  .streak-day.done  { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+  .streak-day.today { background: var(--c-accent);  color: #fff; border-color: var(--c-accent);
+                      box-shadow: 0 0 0 3px rgba(168,155,194,0.25); }
+  .streak-flame {
+    font-size: 28px; margin-right: 6px;
+  }
+  .streak-count {
+    font-family: var(--font-display); font-size: 36px; line-height: 1;
+    color: var(--c-primary); margin-bottom: 4px;
+  }
+  .streak-label { font-size: 12px; color: var(--c-muted); }
+  .habit-row {
+    display: flex; flex-direction: column; gap: 10px; margin-top: 16px;
+  }
+  .habit-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px; border-radius: 10px;
+    background: var(--c-bg); border: 1px solid var(--c-border);
+    cursor: pointer; transition: all var(--transition);
+  }
+  .habit-item:hover { border-color: var(--c-primary); }
+  .habit-item.checked { background: var(--c-primary); border-color: var(--c-primary); color: #fff; }
+  .habit-item.checked .habit-muted { color: rgba(255,255,255,0.7); }
+  .habit-check {
+    width: 22px; height: 22px; border-radius: 6px;
+    border: 1.5px solid var(--c-border); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; background: var(--c-surface);
+  }
+  .habit-item.checked .habit-check { background: rgba(255,255,255,0.3); border-color: transparent; }
+  .habit-name { font-size: 13px; font-weight: 500; flex: 1; }
+  .habit-muted { font-size: 11px; color: var(--c-muted); }
+
+  /* ── MODE SWITCHER ───────────────────────────────────── */
+  .mode-switcher {
+    display: flex; gap: 0; border-radius: 12px; overflow: hidden;
+    border: 1.5px solid var(--c-border); margin-bottom: 20px;
+    background: var(--c-bg);
+  }
+  .mode-btn {
+    flex: 1; padding: 10px 8px; border: none; background: transparent;
+    font-family: var(--font-body); font-size: 12px; font-weight: 500;
+    cursor: pointer; color: var(--c-muted); transition: all var(--transition);
+    line-height: 1.3; text-align: center;
+  }
+  .mode-btn:not(:last-child) { border-right: 1px solid var(--c-border); }
+  .mode-btn:hover { background: var(--c-surface); color: var(--c-text); }
+  .mode-btn.active { background: var(--c-primary); color: #fff; }
+  .mode-btn .mode-icon { font-size: 16px; display: block; margin-bottom: 3px; }
+  .mode-description {
+    background: var(--c-bg); border-radius: 10px; padding: 12px 14px;
+    font-size: 12px; color: var(--c-muted); line-height: 1.6;
+    border-left: 3px solid var(--c-primary); margin-bottom: 16px;
+  }
+  .mode-badge-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .mode-tag {
+    padding: 3px 10px; border-radius: var(--r-pill); font-size: 10px; font-weight: 600;
+    background: var(--c-bg); color: var(--c-muted); border: 1px solid var(--c-border);
+  }
+  .mode-tag.active-tag { background: var(--c-accent); color: #fff; border-color: transparent; }
+
+  /* ── RESPONSIVE ───────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; padding: 40px 20px; }
+    .orb-container { max-width: 240px; margin: 0 auto; }
+    .features-grid { grid-template-columns: 1fr 1fr; }
+    .assessment-teaser { grid-template-columns: 1fr; }
+    .dashboard-layout { grid-template-columns: 1fr; }
+    .sidebar { flex-direction: row; overflow-x: auto; padding: 12px; }
+    .sidebar-section { display: none; }
+    .dash-grid { grid-template-columns: 1fr; }
+    .dash-card.span-2, .dash-card.span-3 { grid-column: span 1; }
+  }
+  @media (max-width: 600px) {
+    .features-grid { grid-template-columns: 1fr; }
+    nav { padding: 0 16px; }
+    .main-content { padding: 20px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── FLOATING PANIC BUTTON ──────────────────────────────── -->
+<button class="panic-btn" onclick="togglePanic()" title="Panic Mode — Breathing Exercise">🌬️</button>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- PAGE: LANDING                                             -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page page-landing" id="page-landing">
+  <nav>
+    <div class="nav-logo">Mind<span>Ease</span></div>
+    <div class="nav-actions">
+      <button class="btn btn-ghost" onclick="showPage('dashboard')">Sign In</button>
+      <button class="btn btn-primary" onclick="showPage('onboarding')">Get Started Free</button>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div>
+      <div class="hero-eyebrow">AI-Powered Mental Wellness</div>
+      <h1>A space to <em>breathe,</em> reflect, and understand yourself</h1>
+      <p>MindEase combines cognitive therapy, speech emotion recognition, and personalised AI to help you work through anxiety, ADHD, and daily stress — at your own pace, in your own words.</p>
+      <div class="hero-cta">
+        <button class="btn btn-primary" onclick="showPage('onboarding')" style="font-size:15px;padding:12px 28px;">Start your session →</button>
+        <button class="btn btn-ghost" onclick="showPage('dashboard')">See the dashboard</button>
+      </div>
+    </div>
+    <div>
+      <div class="orb-container">
+        <div class="orb"></div>
+        <div class="orb-text">"What's really on your mind today?"</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features strip -->
+  <section class="features-strip">
+    <div class="features-strip-inner">
+      <h2>Everything in one place</h2>
+      <div class="features-grid">
+
+        <div class="feature-card">
+          <div class="feature-icon">🎙️</div>
+          <h3>Voice Journaling + Emotion Analysis</h3>
+          <p>Talk freely — no word limit. Speech-to-text transcribes you, while acoustic analysis reads your tone, pauses, and pitch for fatigue and anxiety signals your words might miss.</p>
+          <span class="badge badge-ml">Speech AI</span>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🧠</div>
+          <h3>Adaptive CBT Sessions</h3>
+          <p>Gemini Flash with custom wrappers runs structured cognitive therapy — Empathic Listener, Socratic Inquiry, or Grounding Mode — adapting to your condition and mood state.</p>
+          <span class="badge badge-ai">Gemini AI</span>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🎨</div>
+          <h3>Fully Customisable UI</h3>
+          <p>Choose 3 colours you feel calm in. The whole app renders in your palette. When the AI detects a panic state, it transitions into Minimalist Mode automatically.</p>
+          <span class="badge badge-live">Adaptive</span>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🗺️</div>
+          <h3>Therapist Finder</h3>
+          <p>Python scraper matches your diagnosis to verified, highly-rated local therapists specialised in your exact condition. Shows clinic location, charges, and contact on an interactive map.</p>
+          <span class="badge badge-ai">Auto-Match</span>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📄</div>
+          <h3>AI Clinical Summary PDF</h3>
+          <p>One-click referral report for your real therapist: mood patterns, recurring triggers, session insights — saving 15–20 mins of diagnostic intake, without exposing raw chats.</p>
+          <span class="badge badge-ml">PDF Gen</span>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🚨</div>
+          <h3>Crisis Escalation Engine</h3>
+          <p>Keyword + intent guardrails interrupt the AI session if self-harm language is detected. Tele-MANAS helpline (14416) pops up immediately, with optional emergency contact SMS alert.</p>
+          <span class="badge badge-safety">Safety Layer</span>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Assessment teaser -->
+  <section class="assessment-teaser">
+    <div>
+      <div class="hero-eyebrow" style="margin-bottom:12px;">Before you sign up</div>
+      <h2 style="font-family:var(--font-display);font-size:32px;margin-bottom:16px;">Start with 3 honest questions</h2>
+      <p style="color:var(--c-muted);font-size:15px;line-height:1.7;margin-bottom:24px;">
+        No registration needed to begin. Answer a short assessment — your responses shape your diagnosis, personalise your AI sessions, and help us match you to the right therapist later.
+      </p>
+      <button class="btn btn-primary" onclick="showPage('onboarding')" style="font-size:15px;padding:12px 28px;">Take the assessment →</button>
+    </div>
+    <div class="assessment-card">
+      <div class="q-progress">
+        <div class="q-dot active"></div>
+        <div class="q-dot"></div>
+        <div class="q-dot"></div>
+      </div>
+      <div class="q-label">Question 1 of 3</div>
+      <div class="q-text">When during the day do you feel your lowest?</div>
+      <div class="q-options">
+        <button class="q-option" onclick="selectOption(this)">Morning — I dread getting up</button>
+        <button class="q-option" onclick="selectOption(this)">Afternoon — everything feels heavy</button>
+        <button class="q-option" onclick="selectOption(this)">Evening — thoughts spiral at night</button>
+        <button class="q-option" onclick="selectOption(this)">It's random, unpredictable</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- PAGE: ONBOARDING — Theme Picker                           -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page page-onboarding" id="page-onboarding">
+  <nav>
+    <div class="nav-logo">Mind<span>Ease</span></div>
+    <div class="nav-actions">
+      <button class="btn btn-ghost" onclick="showPage('landing')">← Back</button>
+    </div>
+  </nav>
+  <div class="onboarding-wrap">
+    <div class="onboarding-card">
+      <div style="font-size:40px;margin-bottom:16px;">🎨</div>
+      <h2>Make it yours</h2>
+      <p>Pick the colour that feels most <em>calm</em> to you. MindEase will render your whole experience in that palette.</p>
+
+      <div class="theme-picker">
+        <div class="theme-swatch swatch-teal chosen" data-theme="" data-label="Teal" onclick="pickTheme(this, '')"></div>
+        <div class="theme-swatch swatch-pink" data-theme="pink" data-label="Rose" onclick="pickTheme(this, 'pink')"></div>
+        <div class="theme-swatch swatch-sage" data-theme="sage" data-label="Sage" onclick="pickTheme(this, 'sage')"></div>
+        <div class="theme-swatch swatch-sky"  data-theme="sky"  data-label="Sky"  onclick="pickTheme(this, 'sky')"></div>
+        <div class="theme-swatch swatch-sand" data-theme="sand" data-label="Sand" onclick="pickTheme(this, 'sand')"></div>
+      </div>
+
+      <div style="background:var(--c-bg);border-radius:12px;padding:20px;margin-bottom:28px;text-align:left;">
+        <div style="font-size:12px;color:var(--c-muted);margin-bottom:8px;font-family:var(--font-mono);">PREVIEW</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <div style="height:32px;border-radius:var(--r-pill);background:var(--c-primary);width:90px;"></div>
+          <div style="height:32px;border-radius:var(--r-pill);background:var(--c-accent);width:70px;"></div>
+          <div style="height:32px;border-radius:var(--r-pill);background:var(--c-warm);width:80px;"></div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" style="width:100%;justify-content:center;padding:14px;" onclick="showPage('dashboard')">
+        Continue to MindEase →
+      </button>
+
+      <p style="font-size:12px;color:var(--c-muted);margin-top:16px;">You can change this anytime in Settings.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- PAGE: DASHBOARD                                           -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page page-dashboard" id="page-dashboard">
+  <nav>
+    <div class="nav-logo">Mind<span>Ease</span></div>
+    <div class="nav-actions">
+      <button class="btn btn-ghost" onclick="showPage('landing')">← Home</button>
+      <div style="width:32px;height:32px;border-radius:50%;background:var(--c-primary);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">A</div>
+    </div>
+  </nav>
+
+  <div class="dashboard-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-section">Main</div>
+      <button class="nav-item active" onclick="setActiveNav(this)">
+        <span class="icon">🏠</span> Home
+      </button>
+      <button class="nav-item" onclick="setActiveNav(this)">
+        <span class="icon">💬</span> Session
+        <span class="nav-badge">New</span>
+      </button>
+      <button class="nav-item" onclick="setActiveNav(this)">
+        <span class="icon">🎙️</span> Voice Journal
+      </button>
+      <button class="nav-item" onclick="setActiveNav(this)">
+        <span class="icon">📈</span> Progress
+      </button>
+
+      <div class="sidebar-section">Support</div>
+      <button class="nav-item" onclick="setActiveNav(this)">
+        <span class="icon">🗺️</span> Find Therapist
+      </button>
+      <button class="nav-item" onclick="setActiveNav(this)">
+        <span class="icon">📄</span> My Report
+      </button>
+      <button class="nav-item" onclick="setActiveNav(this)">
+        <span class="icon">🧘</span> Exercises
+      </button>
+
+      <div class="sidebar-section">You</div>
+      <button class="nav-item" onclick="setActiveNav(this)">
+        <span class="icon">🎨</span> Appearance
+      </button>
+      <button class="nav-item" onclick="setActiveNav(this)">
+        <span class="icon">⚙️</span> Settings
+      </button>
+    </div>
+
+    <!-- Main -->
+    <div class="main-content">
+
+      <!-- Greeting -->
+      <div class="greeting">
+        <h2>Hey Arav, good evening 🌙</h2>
+        <p>Your last session was 2 days ago. How are you feeling today?</p>
+      </div>
+
+      <!-- Mood check-in -->
+      <div class="mood-bar">
+        <p>Today's mood</p>
+        <div class="mood-emojis">
+          <div class="mood-emoji" onclick="selectMood(this)" title="Very low">😔</div>
+          <div class="mood-emoji" onclick="selectMood(this)" title="Low">😕</div>
+          <div class="mood-emoji active" onclick="selectMood(this)" title="Okay">😐</div>
+          <div class="mood-emoji" onclick="selectMood(this)" title="Good">🙂</div>
+          <div class="mood-emoji" onclick="selectMood(this)" title="Great">😊</div>
+        </div>
+        <button class="btn btn-outline" style="margin-left:auto;" onclick="showPage('dashboard')">Log it →</button>
+      </div>
+
+      <!-- Dashboard grid -->
+      <div class="dash-grid">
+
+        <!-- Session CTA -->
+        <div class="dash-card session-card span-2">
+          <div class="card-header">
+            <div class="card-title">AI Session</div>
+            <div class="card-icon">✨</div>
+          </div>
+          <h3>Start your session</h3>
+          <p>Adaptive CBT · Anxiety mode · ~30 min · Socratic Inquiry active</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn">💬 Chat session</button>
+            <button class="btn">🎙️ Voice session</button>
+          </div>
+        </div>
+
+        <!-- Diagnosis chip -->
+        <div class="dash-card">
+          <div class="card-header">
+            <div class="card-title">Diagnosis</div>
+            <div class="card-icon">🧠</div>
+          </div>
+          <div style="font-size:22px;font-weight:700;margin-bottom:6px;color:var(--c-primary);">Anxiety</div>
+          <div style="font-size:13px;color:var(--c-muted);margin-bottom:16px;">Severity: 6 / 10 · Assessed Aug 4</div>
+          <div style="background:var(--c-bg);border-radius:8px;padding:10px;font-size:12px;color:var(--c-muted);">
+            Top trigger: <strong style="color:var(--c-text);">Exam pressure + social overthinking</strong>
+          </div>
+        </div>
+
+        <!-- Mood trend -->
+        <div class="dash-card">
+          <div class="card-header">
+            <div class="card-title">Mood — 7 days</div>
+            <div class="card-icon">📈</div>
+          </div>
+          <div class="mood-chart">
+            <div class="mood-bar-item" style="height:40%"></div>
+            <div class="mood-bar-item" style="height:55%"></div>
+            <div class="mood-bar-item" style="height:35%"></div>
+            <div class="mood-bar-item" style="height:70%"></div>
+            <div class="mood-bar-item" style="height:50%"></div>
+            <div class="mood-bar-item" style="height:65%"></div>
+            <div class="mood-bar-item today" style="height:60%"></div>
+          </div>
+          <div class="chart-labels">
+            <div class="chart-label">M</div><div class="chart-label">T</div>
+            <div class="chart-label">W</div><div class="chart-label">T</div>
+            <div class="chart-label">F</div><div class="chart-label">S</div>
+            <div class="chart-label" style="color:var(--c-accent);font-weight:600;">T</div>
+          </div>
+        </div>
+
+        <!-- Voice journal + SER -->
+        <div class="dash-card">
+          <div class="card-header">
+            <div class="card-title">Voice Journal</div>
+            <div class="card-icon">🎙️</div>
+          </div>
+          <div class="voice-recorder">
+            <button class="mic-btn" id="micBtn" onclick="toggleRecording(this)">🎙️</button>
+            <div class="voice-waveform" id="waveform" style="opacity:0">
+              <div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div>
+            </div>
+            <div class="voice-status" id="voiceStatus">Tap to start — no word limit</div>
+          </div>
+          <div class="ser-indicator" style="margin-top:12px;">
+            <div style="font-size:18px;">📊</div>
+            <div class="ser-bar-wrap">
+              <div class="ser-label">Emotion reading</div>
+              <div style="display:flex;flex-direction:column;gap:5px;">
+                <div>
+                  <div class="ser-label">Calm</div>
+                  <div class="ser-bar"><div class="ser-fill ser-calm"></div></div>
+                </div>
+                <div>
+                  <div class="ser-label">Anxious</div>
+                  <div class="ser-bar"><div class="ser-fill ser-anxiety"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Session insights chart -->
+        <div class="dash-card span-2">
+          <div class="card-header">
+            <div class="card-title">Past insights</div>
+            <div class="card-icon">💡</div>
+          </div>
+          <div class="insight-item">
+            <div class="date">Aug 2, 2026 · Session #4</div>
+            <div class="text">"My fear of failure is really about what others will think of me — not the failure itself."</div>
+            <span class="condition-chip chip-anxiety">Anxiety</span>
+          </div>
+          <div class="insight-item">
+            <div class="date">Jul 29, 2026 · Session #3</div>
+            <div class="text">"I can't control the outcome, only what I do today. That's actually enough."</div>
+            <span class="condition-chip chip-stress">Stress</span>
+          </div>
+          <div class="insight-item">
+            <div class="date">Jul 24, 2026 · Session #2</div>
+            <div class="text">"The spiral starts when I stop and let the thoughts have space. Movement helps — even just a walk."</div>
+            <span class="condition-chip chip-anxiety">Anxiety</span>
+          </div>
+        </div>
+
+        <!-- Therapist finder -->
+        <div class="dash-card span-2">
+          <div class="card-header">
+            <div class="card-title">Recommended Therapists</div>
+            <div class="card-icon">🗺️</div>
+          </div>
+          <div class="therapist-card">
+            <div class="t-avatar">👩‍⚕️</div>
+            <div class="t-info">
+              <h4>Dr. Priya Sharma</h4>
+              <p>Clinical Psychologist · Kanpur · ₹800/session</p>
+              <div class="t-tags">
+                <span class="t-tag">Anxiety</span>
+                <span class="t-tag">CBT</span>
+                <span class="t-tag">Young adults</span>
+              </div>
+            </div>
+            <div class="t-rating">⭐ 4.9</div>
+          </div>
+          <div class="therapist-card">
+            <div class="t-avatar">👨‍⚕️</div>
+            <div class="t-info">
+              <h4>Dr. Rohit Agarwal</h4>
+              <p>Psychiatrist · Kanpur · ₹1,200/session</p>
+              <div class="t-tags">
+                <span class="t-tag">ADHD</span>
+                <span class="t-tag">Anxiety</span>
+                <span class="t-tag">Online available</span>
+              </div>
+            </div>
+            <div class="t-rating">⭐ 4.7</div>
+          </div>
+          <div class="map-placeholder">
+            <div class="map-icon">📍</div>
+            <div>OpenStreetMap · Nearest clinics pinned</div>
+          </div>
+        </div>
+
+        <!-- PDF Report -->
+        <div class="dash-card">
+          <div class="card-header">
+            <div class="card-title">Clinical Report</div>
+            <div class="card-icon">📄</div>
+          </div>
+          <div class="export-preview">
+            Patient: Arav M.<br>
+            Condition: Anxiety (6/10)<br>
+            Sessions: 4<br>
+            Top trigger: Exam pressure<br>
+            Mood trend: Improving ↑<br>
+            Key insight: Fear of judgement<br>
+            ─────────────────────<br>
+            <em>Auto-generated · No raw chat exposed</em>
+          </div>
+          <button class="btn btn-outline" style="width:100%;justify-content:center;margin-top:14px;" onclick="alert('PDF generated! Share with your therapist.')">
+            📥 Download PDF Report
+          </button>
+        </div>
+
+        <!-- ─── STREAK + HABIT TRACKER ────────────────────── -->
+        <div class="dash-card">
+          <div class="card-header">
+            <div class="card-title">Streak &amp; Habits</div>
+            <div class="card-icon">🔥</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+            <div class="streak-flame">🔥</div>
+            <div>
+              <div class="streak-count" id="streakCount">6</div>
+              <div class="streak-label">day streak — keep it going</div>
+            </div>
+          </div>
+          <div class="streak-row" id="streakRow">
+            <div class="streak-day done" title="Mon">M</div>
+            <div class="streak-day done" title="Tue">T</div>
+            <div class="streak-day done" title="Wed">W</div>
+            <div class="streak-day done" title="Thu">T</div>
+            <div class="streak-day done" title="Fri">F</div>
+            <div class="streak-day done" title="Sat">S</div>
+            <div class="streak-day today" title="Today">T</div>
+          </div>
+          <div class="habit-row">
+            <div class="habit-item checked" id="h1" onclick="toggleHabit(this)">
+              <div class="habit-check">✓</div>
+              <div class="habit-name">Morning check-in</div>
+              <div class="habit-muted">Done today</div>
+            </div>
+            <div class="habit-item" id="h2" onclick="toggleHabit(this)">
+              <div class="habit-check"></div>
+              <div class="habit-name">Voice journal</div>
+              <div class="habit-muted">Not yet</div>
+            </div>
+            <div class="habit-item" id="h3" onclick="toggleHabit(this)">
+              <div class="habit-check"></div>
+              <div class="habit-name">Breathing exercise</div>
+              <div class="habit-muted">Not yet</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── SESSION MODE SWITCHER ──────────────────────── -->
+        <div class="dash-card span-2">
+          <div class="card-header">
+            <div class="card-title">AI Session Mode</div>
+            <div class="card-icon">🧠</div>
+          </div>
+          <div class="mode-switcher" id="modeSwitcher">
+            <button class="mode-btn active" onclick="switchMode(this,'empathic')" data-mode="empathic">
+              <span class="mode-icon">🤝</span>Empathic<br>Listener
+            </button>
+            <button class="mode-btn" onclick="switchMode(this,'socratic')" data-mode="socratic">
+              <span class="mode-icon">🔍</span>Socratic<br>Inquiry
+            </button>
+            <button class="mode-btn" onclick="switchMode(this,'grounding')" data-mode="grounding">
+              <span class="mode-icon">🌿</span>Grounding<br>Exercise
+            </button>
+            <button class="mode-btn" onclick="switchMode(this,'cbt')" data-mode="cbt">
+              <span class="mode-icon">🧩</span>CBT<br>Challenge
+            </button>
+          </div>
+          <div class="mode-description" id="modeDesc">
+            <strong>Empathic Listener</strong> — The AI listens and validates without jumping to advice. 
+            It reflects back what you're saying, names the feeling, and gives you space to keep going. 
+            Use this when you need to vent first and think later.
+          </div>
+          <div class="mode-badge-row" id="modeTags">
+            <span class="mode-tag active-tag">No unsolicited advice</span>
+            <span class="mode-tag active-tag">Validation-first</span>
+            <span class="mode-tag active-tag">Open-ended</span>
+            <span class="mode-tag">Socratic Qs</span>
+            <span class="mode-tag">Reframing</span>
+            <span class="mode-tag">Exercises</span>
+          </div>
+          <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="alert('Starting session in Empathic Listener mode…')">
+            Start session in this mode →
+          </button>
+        </div>
+
+        <!-- Crisis banner (hidden by default, shown when triggered) -->
+        <div class="dash-card span-3">
+          <div class="card-header">
+            <div class="card-title">Safety Layer</div>
+            <div class="card-icon">🚨</div>
+          </div>
+          <p style="font-size:13px;color:var(--c-muted);margin-bottom:14px;">
+            Crisis guardrails are active. If distress or self-harm language is detected in any session, the chat pauses and the following appears immediately:
+          </p>
+          <div class="crisis-banner show">
+            <h4>🚨 We noticed something</h4>
+            <p>It sounds like you might be going through something serious. You don't have to face this alone — trained support is one call away.</p>
+            <div class="crisis-numbers">
+              <button class="crisis-num">📞 Tele-MANAS: 14416</button>
+              <button class="crisis-num">iCall: 9152987821</button>
+              <button class="crisis-num" style="background:var(--c-text);">✉️ Alert emergency contact</button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /dash-grid -->
+    </div><!-- /main-content -->
+  </div><!-- /dashboard-layout -->
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- PAGE: PANIC MODE                                          -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page page-panic" id="page-panic">
+  <div class="panic-orb" id="panicOrb">🌿</div>
+  <div class="panic-instruction" id="panicInstruction">Breathe in</div>
+  <div class="panic-counter" id="panicCounter">4</div>
+  <div class="panic-sub">Follow the orb. You're safe. Take your time.</div>
+  <div class="breathing-steps">
+    <div class="breath-step active-breath" id="bs-in">Breathe in · 4s</div>
+    <div class="breath-step" id="bs-hold">Hold · 4s</div>
+    <div class="breath-step" id="bs-out">Breathe out · 4s</div>
+  </div>
+  <button class="btn btn-ghost" style="margin-top:8px;" onclick="togglePanic()">← I'm okay, go back</button>
+</div>
+
+
+<script>
+// ════════════════════════════════════════════════════════
+// CONFIG  — swap these before deploying
+// ════════════════════════════════════════════════════════
+const API_BASE       = 'http://localhost:8000';          // your GCP VM IP in prod
+const SUPABASE_URL   = 'https://dhtqnfojdhxovinitxev.supabase.co';
+const SUPABASE_ANON  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRodHFuZm9qZGh4b3Zpbml0eGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4MjAyOTAsImV4cCI6MjEwMTM5NjI5MH0.A1Lew8dem0GJXM5-hquBuIv7S0tT42bsPkNoZ5vhsno';
+
+// ════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════
+let STATE = {
+  jwt:          null,    // Supabase access token
+  user:         null,    // { id, email }
+  diagnosisId:  null,
+  condition:    'anxiety',
+  sessionId:    null,
+  sessionMode:  'empathic',
+  chatHistory:  [],      // [{role, parts:[text]}]
+  moodBefore:   null,
+  mediaRecorder: null,
+  audioChunks:  [],
+  streakCount:  0,
+};
+
+// Persist JWT across refresh
+function loadState() {
+  const saved = sessionStorage.getItem('me_jwt');
+  if (saved) { STATE.jwt = saved; }
+  const theme = localStorage.getItem('me_theme') || '';
+  if (theme) document.body.className = theme ? `theme-${theme}` : '';
+}
+
+// ════════════════════════════════════════════════════════
+// API HELPERS
+// ════════════════════════════════════════════════════════
+async function api(method, path, body = null) {
+  const opts = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(STATE.jwt ? { Authorization: `Bearer ${STATE.jwt}` } : {}),
+    },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API_BASE + path, opts);
+  if (!res.ok) {
+    // FastAPI's HTTPException always serializes as {"detail": ...} — detail can be
+    // a plain string ("SESSION_EXPIRED") or a structured object (see SESSION_TIME_LIMIT).
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    const message = typeof body.detail === 'string'
+      ? body.detail
+      : (body.detail?.error || res.statusText);
+    const err = new Error(message);
+    err.status = res.status;
+    err.detail = body.detail;
+    throw err;
+  }
+  return res.json();
+}
+
+async function apiBlob(path) {
+  const res = await fetch(API_BASE + path, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${STATE.jwt}` },
+  });
+  if (!res.ok) throw new Error('PDF generation failed');
+  return res.blob();
+}
+
+// ════════════════════════════════════════════════════════
+// SUPABASE AUTH  (direct REST — no SDK needed)
+// ════════════════════════════════════════════════════════
+async function supabaseAuth(endpoint, payload) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error_description || data.msg || 'Auth error');
+  return data;
+}
+
+async function signUp(email, password, name) {
+  const data = await supabaseAuth('signup', {
+    email, password,
+    data: { name },
+  });
+  STATE.jwt  = data.access_token;
+  STATE.user = { id: data.user.id, email };
+  sessionStorage.setItem('me_jwt', STATE.jwt);
+}
+
+async function signIn(email, password) {
+  const data = await supabaseAuth('token?grant_type=password', { email, password });
+  STATE.jwt  = data.access_token;
+  STATE.user = { id: data.user.id, email };
+  sessionStorage.setItem('me_jwt', STATE.jwt);
+}
+
+function signOut() {
+  STATE.jwt = null; STATE.user = null;
+  sessionStorage.removeItem('me_jwt');
+  showPage('landing');
+}
+
+// ════════════════════════════════════════════════════════
+// PAGE ROUTING
+// ════════════════════════════════════════════════════════
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => { p.style.display = 'none'; });
+  const map = { landing: 'page-landing', onboarding: 'page-onboarding', dashboard: 'page-dashboard' };
+  const el = document.getElementById(map[name]);
+  if (el) el.style.display = 'block';
+  if (name === 'dashboard') initDashboard();
+}
+
+// ════════════════════════════════════════════════════════
+// DASHBOARD INIT  — called every time dashboard shows
+// ════════════════════════════════════════════════════════
+async function initDashboard() {
+  if (!STATE.jwt) return;
+  try {
+    // Load latest diagnosis
+    const { diagnosis } = await api('GET', '/api/v1/diagnosis/latest');
+    if (diagnosis) {
+      STATE.diagnosisId = diagnosis.id;
+      STATE.condition   = diagnosis.condition;
+      document.getElementById('diagCondition') && (
+        document.getElementById('diagCondition').textContent = diagnosis.condition.charAt(0).toUpperCase() + diagnosis.condition.slice(1)
+      );
+    }
+    // Load mood history → update chart
+    const { mood_history } = await api('GET', '/api/v1/mood/history?days=7');
+    renderMoodChart(mood_history || []);
+
+    // Load session history → insights
+    const { sessions } = await api('GET', '/api/v1/session/history?limit=5');
+    renderInsights(sessions || []);
+
+  } catch (e) { console.warn('Dashboard init:', e.message); }
+}
+
+function renderMoodChart(history) {
+  const bars = document.querySelectorAll('.mood-bar-item');
+  if (!bars.length) return;
+  // Fill last 7 days; if fewer entries, leave defaults
+  const recent = history.slice(-7);
+  recent.forEach((entry, i) => {
+    if (bars[i]) bars[i].style.height = `${(entry.score / 5) * 100}%`;
+  });
+}
+
+function renderInsights(sessions) {
+  const list = document.querySelector('.insight-item')?.parentElement;
+  if (!list || !sessions.length) return;
+  // Remove placeholder items
+  list.querySelectorAll('.insight-item').forEach(el => el.remove());
+  sessions.forEach(s => {
+    if (!s.insight) return;
+    const cond = s.diagnoses?.condition || STATE.condition;
+    const chipClass = { anxiety: 'chip-anxiety', adhd: 'chip-adhd', stress: 'chip-stress' }[cond] || 'chip-stress';
+    const div = document.createElement('div');
+    div.className = 'insight-item';
+    div.innerHTML = `
+      <div class="date">${s.created_at?.slice(0,10)} · Session</div>
+      <div class="text">"${s.insight}"</div>
+      <span class="condition-chip ${chipClass}">${cond}</span>`;
+    list.appendChild(div);
+  });
+}
+
+// ════════════════════════════════════════════════════════
+// AUTH UI
+// ════════════════════════════════════════════════════════
+function showAuthModal(mode = 'signin') {
+  const existing = document.getElementById('authModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'authModal';
+  modal.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.4);
+    display:flex;align-items:center;justify-content:center;z-index:9999;`;
+  modal.innerHTML = `
+    <div style="background:var(--c-surface);border-radius:20px;padding:36px;
+                width:min(420px,90vw);box-shadow:var(--shadow-lg);">
+      <h2 style="font-family:var(--font-display);font-size:24px;margin-bottom:6px;">
+        ${mode === 'signup' ? 'Create your account' : 'Welcome back'}
+      </h2>
+      <p style="color:var(--c-muted);font-size:14px;margin-bottom:24px;">
+        ${mode === 'signup' ? 'Your progress will be saved.' : 'Sign in to continue your journey.'}
+      </p>
+      ${mode === 'signup' ? `
+        <input id="authName" placeholder="Your first name" style="${inputStyle()}">
+      ` : ''}
+      <input id="authEmail" type="email" placeholder="Email address" style="${inputStyle()}">
+      <input id="authPassword" type="password" placeholder="Password" style="${inputStyle()}">
+      <div id="authError" style="color:var(--c-danger);font-size:13px;margin-bottom:12px;display:none;"></div>
+      <button onclick="submitAuth('${mode}')" class="btn btn-primary"
+              style="width:100%;justify-content:center;padding:13px;font-size:15px;">
+        ${mode === 'signup' ? 'Create account' : 'Sign in'}
+      </button>
+      <p style="text-align:center;font-size:13px;color:var(--c-muted);margin-top:16px;">
+        ${mode === 'signup'
+          ? `Already have an account? <a href="#" onclick="showAuthModal('signin')" style="color:var(--c-primary);">Sign in</a>`
+          : `New here? <a href="#" onclick="showAuthModal('signup')" style="color:var(--c-primary);">Create account</a>`
+        }
+      </p>
+      <button onclick="document.getElementById('authModal').remove()"
+              style="position:absolute;top:16px;right:20px;background:none;border:none;
+                     font-size:20px;cursor:pointer;color:var(--c-muted);">✕</button>
+    </div>`;
+  modal.style.position = 'fixed';
+  document.body.appendChild(modal);
+}
+
+function inputStyle() {
+  return `display:block;width:100%;padding:11px 14px;border-radius:10px;
+          border:1.5px solid var(--c-border);font-family:var(--font-body);
+          font-size:14px;margin-bottom:12px;background:var(--c-bg);
+          color:var(--c-text);outline:none;`;
+}
+
+async function submitAuth(mode) {
+  const email    = document.getElementById('authEmail')?.value.trim();
+  const password = document.getElementById('authPassword')?.value;
+  const name     = document.getElementById('authName')?.value.trim() || 'Friend';
+  const errEl    = document.getElementById('authError');
+
+  if (!email || !password) { showAuthError('Please fill in all fields.'); return; }
+
+  try {
+    if (mode === 'signup') await signUp(email, password, name);
+    else                   await signIn(email, password);
+
+    document.getElementById('authModal')?.remove();
+
+    // Migrate any pre-auth assessment from localStorage
+    const pendingDiag = localStorage.getItem('me_pending_diagnosis');
+    if (pendingDiag) {
+      const d = JSON.parse(pendingDiag);
+      await api('POST', '/api/v1/diagnosis', d);
+      localStorage.removeItem('me_pending_diagnosis');
+    }
+    showPage('onboarding');
+  } catch (e) {
+    showAuthError(e.message);
+  }
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('authError');
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+
+// ════════════════════════════════════════════════════════
+// THEME PICKER
+// ════════════════════════════════════════════════════════
+function pickTheme(el, theme) {
+  document.querySelectorAll('.theme-swatch').forEach(s => s.classList.remove('chosen'));
+  el.classList.add('chosen');
+  document.body.className = theme ? `theme-${theme}` : '';
+  localStorage.setItem('me_theme', theme);
+}
+
+// ════════════════════════════════════════════════════════
+// ASSESSMENT
+// ════════════════════════════════════════════════════════
+const ASSESSMENT_QS = [
+  {
+    q: 'When during the day do you feel your lowest?',
+    opts: ['Morning — I dread getting up', 'Afternoon — everything feels heavy',
+           'Evening — thoughts spiral at night', "It's random, unpredictable"],
+  },
+  {
+    q: 'What kind of thoughts repeat most often?',
+    opts: ['Worrying about what others think', 'Feeling behind or not good enough',
+           'Struggling to focus or follow through', 'Replaying things that went wrong'],
+  },
+  {
+    q: "What's helped you even a little before?",
+    opts: ['Talking to someone I trust', 'Getting outside or moving',
+           'Journaling or writing things out', 'Honestly, nothing yet'],
+  },
+];
+
+let assessmentStep = 0;
+const assessmentAnswers = {};
+
+function selectOption(el) {
+  el.closest('.q-options').querySelectorAll('.q-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  assessmentAnswers[ASSESSMENT_QS[assessmentStep].q] = el.textContent.trim();
+  // Auto-advance after short delay
+  setTimeout(() => advanceAssessment(), 400);
+}
+
+function advanceAssessment() {
+  if (assessmentStep < ASSESSMENT_QS.length - 1) {
+    assessmentStep++;
+    renderAssessmentQ();
+  } else {
+    finishAssessment();
+  }
+}
+
+function renderAssessmentQ() {
+  const qData = ASSESSMENT_QS[assessmentStep];
+  const dots  = document.querySelector('.q-progress');
+  const label = document.querySelector('.q-label');
+  const text  = document.querySelector('.q-text');
+  const opts  = document.querySelector('.q-options');
+
+  if (dots) {
+    dots.querySelectorAll('.q-dot').forEach((d, i) => d.classList.toggle('active', i <= assessmentStep));
+  }
+  if (label) label.textContent = `Question ${assessmentStep + 1} of ${ASSESSMENT_QS.length}`;
+  if (text)  text.textContent  = qData.q;
+  if (opts) {
+    opts.innerHTML = qData.opts.map(o =>
+      `<button class="q-option" onclick="selectOption(this)">${o}</button>`
+    ).join('');
+  }
+}
+
+async function finishAssessment() {
+  // Determine condition from answers (simple heuristic)
+  const answers = Object.values(assessmentAnswers).join(' ').toLowerCase();
+  const condition =
+    answers.includes('focus') || answers.includes('follow through') ? 'adhd' :
+    answers.includes('worry') || answers.includes('others think')   ? 'anxiety' :
+    answers.includes('spiral') || answers.includes('evening')        ? 'anxiety' :
+    'stress';
+
+  const diagPayload = { condition, severity_score: 6, answers_json: assessmentAnswers };
+
+  if (STATE.jwt) {
+    try {
+      const { diagnosis_id } = await api('POST', '/api/v1/diagnosis', diagPayload);
+      STATE.diagnosisId = diagnosis_id;
+      STATE.condition   = condition;
+    } catch (e) { console.warn('Diagnosis save:', e); }
+  } else {
+    // Not logged in yet — save to localStorage, migrate after auth
+    localStorage.setItem('me_pending_diagnosis', JSON.stringify(diagPayload));
+    STATE.condition = condition;
+  }
+  showPage('onboarding');
+}
+
+// ════════════════════════════════════════════════════════
+// MOOD CHECK-IN
+// ════════════════════════════════════════════════════════
+function selectMood(el) {
+  document.querySelectorAll('.mood-emoji').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  STATE.moodBefore = el.title === 'Very low' ? 1 : el.title === 'Low' ? 2 :
+                     el.title === 'Okay'     ? 3 : el.title === 'Good' ? 4 : 5;
+}
+
+async function logMood() {
+  if (!STATE.jwt || !STATE.moodBefore) return;
+  try {
+    await api('POST', '/api/v1/mood', { score: STATE.moodBefore, note: '' });
+    toast('Mood logged ✓');
+  } catch (e) { toast('Could not log mood — try again', 'error'); }
+}
+
+// ════════════════════════════════════════════════════════
+// SESSION (CHAT)
+// ════════════════════════════════════════════════════════
+async function startChatSession() {
+  if (!STATE.jwt) { showAuthModal('signin'); return; }
+  if (!STATE.diagnosisId) { toast('Complete the assessment first', 'error'); return; }
+
+  openChatOverlay();
+  try {
+    const data = await api('POST', '/api/v1/session/start', {
+      diagnosis_id: STATE.diagnosisId,
+      mode: STATE.sessionMode,
+    });
+    STATE.sessionId   = data.session_id;
+    STATE.chatHistory = [];
+    appendChatBubble('ai', data.opening_message);
+    STATE.chatHistory.push({ role: 'model', parts: [data.opening_message] });
+  } catch (e) {
+    appendChatBubble('ai', 'Something went wrong starting the session. Please try again.');
+  }
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chatInput');
+  const msg   = input?.value.trim();
+  if (!msg || !STATE.sessionId) return;
+  input.value = '';
+
+  appendChatBubble('user', msg);
+  showTypingIndicator(true);
+
+  const newHistory = [...STATE.chatHistory, { role: 'user', parts: [msg] }];
+
+  try {
+    const data = await api('POST', '/api/v1/session/message', {
+      session_id: STATE.sessionId,
+      message:    msg,
+      history:    STATE.chatHistory,
+      mode:       STATE.sessionMode,
+    });
+
+    showTypingIndicator(false);
+    appendChatBubble('ai', data.reply);
+    STATE.chatHistory = [...newHistory, { role: 'model', parts: [data.reply] }];
+
+    // Show crisis banner if flagged
+    if (data.crisis_detected) {
+      document.querySelector('.crisis-banner')?.classList.add('show');
+      document.getElementById('chatInput').disabled = true;
+    }
+  } catch (e) {
+    showTypingIndicator(false);
+
+    if (e.status === 410 && e.detail === 'SESSION_EXPIRED') {
+      appendChatBubble('ai',
+        "This session timed out after 30 minutes of inactivity. " +
+        "Start a new session to continue — your past insights are saved."
+      );
+      document.getElementById('chatInput').disabled = true;
+      return;
+    }
+
+    if (e.status === 410 && e.detail?.error === 'SESSION_TIME_LIMIT') {
+      appendChatBubble('ai',
+        "We've hit the 1-hour mark for this session — I've saved what you worked through today."
+      );
+      document.getElementById('chatInput').disabled = true;
+      closeChatOverlay();
+      showInsightCard(e.detail.insight, e.detail.mood_delta);
+      STATE.sessionId   = null;
+      STATE.chatHistory = [];
+      initDashboard();
+      return;
+    }
+
+    appendChatBubble('ai', 'Something went wrong. Your session is saved — try sending again.');
+  }
+}
+
+async function endChatSession() {
+  if (!STATE.sessionId) return;
+  const moodAfter = parseInt(prompt('How are you feeling now? (1 = very low, 5 = great)') || '3');
+  try {
+    const data = await api('POST', '/api/v1/session/end', {
+      session_id:   STATE.sessionId,
+      mood_before:  STATE.moodBefore || 3,
+      mood_after:   Math.min(5, Math.max(1, moodAfter)),
+      history:      STATE.chatHistory,
+    });
+    closeChatOverlay();
+    showInsightCard(data.insight, data.mood_delta);
+    STATE.sessionId  = null;
+    STATE.chatHistory = [];
+    initDashboard();  // refresh charts
+  } catch (e) {
+    toast('Could not save session — try again', 'error');
+  }
+}
+
+function openChatOverlay() {
+  let overlay = document.getElementById('chatOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'chatOverlay';
+    overlay.style.cssText = `
+      position:fixed;inset:0;background:var(--c-bg);z-index:500;
+      display:flex;flex-direction:column;`;
+    overlay.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;
+                  background:var(--c-surface);border-bottom:1px solid var(--c-border);">
+        <button onclick="closeChatOverlay()" class="btn btn-ghost" style="padding:8px 12px;">← Back</button>
+        <div style="font-family:var(--font-display);font-size:18px;color:var(--c-primary);">MindEase</div>
+        <div style="margin-left:auto;display:flex;gap:8px;">
+          <span style="font-size:12px;color:var(--c-muted);align-self:center;" id="modeLabel">
+            ${STATE.sessionMode}
+          </span>
+          <button onclick="endChatSession()" class="btn btn-outline" style="padding:8px 16px;font-size:13px;">
+            End Session
+          </button>
+        </div>
+      </div>
+      <div id="chatMessages" style="flex:1;overflow-y:auto;padding:24px 20px;
+           display:flex;flex-direction:column;gap:12px;max-width:700px;
+           width:100%;margin:0 auto;"></div>
+      <div style="padding:16px 20px;background:var(--c-surface);
+                  border-top:1px solid var(--c-border);max-width:700px;
+                  width:100%;margin:0 auto;display:flex;gap:10px;">
+        <input id="chatInput" placeholder="Type or speak…"
+               onkeydown="if(event.key==='Enter')sendChatMessage()"
+               style="flex:1;padding:12px 16px;border-radius:var(--r-pill);
+                      border:1.5px solid var(--c-border);font-family:var(--font-body);
+                      font-size:14px;background:var(--c-bg);color:var(--c-text);outline:none;">
+        <button onclick="sendChatMessage()" class="btn btn-primary" style="padding:12px 20px;">Send</button>
+      </div>`;
+    document.body.appendChild(overlay);
+  }
+  overlay.style.display = 'flex';
+}
+
+function closeChatOverlay() {
+  const overlay = document.getElementById('chatOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function appendChatBubble(role, text) {
+  const msgs = document.getElementById('chatMessages');
+  if (!msgs) return;
+  const isAI = role === 'ai';
+  const div = document.createElement('div');
+  div.style.cssText = `
+    max-width:78%;padding:12px 16px;border-radius:${isAI ? '4px 16px 16px 16px' : '16px 16px 4px 16px'};
+    font-size:14px;line-height:1.6;
+    background:${isAI ? 'var(--c-surface)' : 'var(--c-primary)'};
+    color:${isAI ? 'var(--c-text)' : '#fff'};
+    align-self:${isAI ? 'flex-start' : 'flex-end'};
+    border:${isAI ? '1px solid var(--c-border)' : 'none'};`;
+  div.textContent = text;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function showTypingIndicator(show) {
+  const id = 'typingIndicator';
+  if (show) {
+    if (document.getElementById(id)) return;
+    const div = document.createElement('div');
+    div.id = id;
+    div.style.cssText = `
+      max-width:78%;padding:12px 16px;border-radius:4px 16px 16px 16px;
+      background:var(--c-surface);border:1px solid var(--c-border);
+      align-self:flex-start;display:flex;gap:4px;align-items:center;`;
+    div.innerHTML = `
+      <span style="width:7px;height:7px;border-radius:50%;background:var(--c-muted);
+                   animation:wave 1.2s ease-in-out infinite;animation-delay:0s"></span>
+      <span style="width:7px;height:7px;border-radius:50%;background:var(--c-muted);
+                   animation:wave 1.2s ease-in-out infinite;animation-delay:0.2s"></span>
+      <span style="width:7px;height:7px;border-radius:50%;background:var(--c-muted);
+                   animation:wave 1.2s ease-in-out infinite;animation-delay:0.4s"></span>`;
+    document.getElementById('chatMessages')?.appendChild(div);
+    document.getElementById('chatMessages').scrollTop = 99999;
+  } else {
+    document.getElementById(id)?.remove();
+  }
+}
+
+function showInsightCard(insight, moodDelta) {
+  const card = document.createElement('div');
+  card.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;
+    align-items:center;justify-content:center;z-index:600;`;
+  card.innerHTML = `
+    <div style="background:var(--c-surface);border-radius:20px;padding:36px;
+                max-width:440px;width:90%;text-align:center;box-shadow:var(--shadow-lg);">
+      <div style="font-size:32px;margin-bottom:12px;">✦</div>
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--c-accent);
+                  letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">
+        Today's Insight
+      </div>
+      <p style="font-family:var(--font-display);font-size:18px;line-height:1.6;
+                color:var(--c-text);margin-bottom:16px;">"${insight}"</p>
+      <div style="font-size:13px;color:var(--c-muted);margin-bottom:24px;">
+        ${moodDelta == null
+          ? 'Mood not recorded for this session'
+          : `Mood shift: ${moodDelta > 0 ? '+' : ''}${moodDelta} ${moodDelta > 0 ? '↑' : moodDelta < 0 ? '↓' : '→'}`}
+      </div>
+      <button onclick="this.closest('[style]').remove()" class="btn btn-primary"
+              style="width:100%;justify-content:center;padding:13px;">
+        Save &amp; close
+      </button>
+    </div>`;
+  document.body.appendChild(card);
+}
+
+// ════════════════════════════════════════════════════════
+// VOICE JOURNAL  (real MediaRecorder → /voice/transcribe)
+// ════════════════════════════════════════════════════════
+async function toggleRecording(btn) {
+  const waveform = document.getElementById('waveform');
+  const status   = document.getElementById('voiceStatus');
+
+  if (!STATE.mediaRecorder || STATE.mediaRecorder.state === 'inactive') {
+    // Start recording
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      STATE.audioChunks  = [];
+      STATE.mediaRecorder = new MediaRecorder(stream);
+      STATE.mediaRecorder.ondataavailable = e => STATE.audioChunks.push(e.data);
+      STATE.mediaRecorder.onstop = () => uploadVoice(stream);
+      STATE.mediaRecorder.start();
+
+      btn.textContent = '⏹️';
+      btn.classList.add('recording');
+      waveform.style.opacity = '1';
+      status.textContent = 'Listening… speak freely';
+    } catch (e) {
+      status.textContent = 'Microphone access denied.';
+    }
+  } else {
+    // Stop recording
+    STATE.mediaRecorder.stop();
+    btn.textContent = '🎙️';
+    btn.classList.remove('recording');
+    waveform.style.opacity = '0';
+    status.textContent = 'Processing…';
+  }
+}
+
+async function uploadVoice(stream) {
+  stream.getTracks().forEach(t => t.stop());
+  const status = document.getElementById('voiceStatus');
+  if (!STATE.jwt) { status.textContent = 'Sign in to save voice journals.'; return; }
+
+  const blob    = new Blob(STATE.audioChunks, { type: 'audio/webm' });
+  const formData = new FormData();
+  formData.append('audio', blob, 'journal.webm');
+
+  try {
+    const res = await fetch(API_BASE + '/api/v1/voice/transcribe', {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${STATE.jwt}` },
+      body:    formData,
+    });
+    const data = await res.json();
+    const emo  = data.emotion || {};
+    status.textContent =
+      `✓ ${data.transcript?.slice(0,60)}… · calm: ${Math.round((emo.calm||0)*100)}%, anxious: ${Math.round((emo.anxious||0)*100)}%`;
+
+    // Update SER bars
+    document.querySelector('.ser-calm')   ?.style.setProperty('width', `${Math.round((emo.calm||0)*100)}%`);
+    document.querySelector('.ser-anxiety')?.style.setProperty('width', `${Math.round((emo.anxious||0)*100)}%`);
+  } catch (e) {
+    status.textContent = 'Transcription failed — try again.';
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// THERAPIST FINDER
+// ════════════════════════════════════════════════════════
+async function findTherapists() {
+  if (!STATE.jwt) { showAuthModal('signin'); return; }
+  const city = prompt('Your city (e.g. Kanpur, Delhi, Mumbai)?') || 'Kanpur';
+  toast('Searching for therapists…');
+  try {
+    const { therapists } = await api('POST', '/api/v1/therapist/search', {
+      city, condition: STATE.condition,
+    });
+    renderTherapists(therapists);
+  } catch (e) { toast('Search failed — try again', 'error'); }
+}
+
+function renderTherapists(list) {
+  const container = document.querySelector('.therapist-card')?.parentElement;
+  if (!container) return;
+  container.querySelectorAll('.therapist-card').forEach(el => el.remove());
+  list.forEach(t => {
+    const div = document.createElement('div');
+    div.className = 'therapist-card';
+    div.innerHTML = `
+      <div class="t-avatar">👨‍⚕️</div>
+      <div class="t-info">
+        <h4>${t.name}</h4>
+        <p>${t.specialty} · ${t.location} · ${t.fee}</p>
+        <div class="t-tags">${(t.tags||[]).map(tag=>`<span class="t-tag">${tag}</span>`).join('')}</div>
+      </div>
+      <div class="t-rating">⭐ ${t.rating}</div>`;
+    container.insertBefore(div, container.querySelector('.map-placeholder'));
+  });
+  toast(`Found ${list.length} therapists`);
+}
+
+// ════════════════════════════════════════════════════════
+// PDF REPORT
+// ════════════════════════════════════════════════════════
+async function generateReport() {
+  if (!STATE.jwt) { showAuthModal('signin'); return; }
+  toast('Generating your report…');
+  try {
+    const blob = await apiBlob('/api/v1/report/generate');
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'MindEase_Clinical_Report.pdf';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('Report downloaded ✓');
+  } catch (e) { toast('Could not generate report — complete at least one session first', 'error'); }
+}
+
+// ════════════════════════════════════════════════════════
+// CRISIS ALERT
+// ════════════════════════════════════════════════════════
+async function sendCrisisAlert() {
+  if (!STATE.jwt) return;
+  const name  = prompt('Emergency contact name?');
+  const phone = prompt('Their phone number (with country code)?');
+  const email = prompt('Their email?');
+  if (!name || !phone || !email) return;
+  try {
+    await api('POST', '/api/v1/crisis/alert', {
+      contact_name: name, contact_phone: phone, contact_email: email,
+    });
+    toast('Alert sent to ' + name + ' ✓');
+  } catch (e) { toast('Alert failed — please call them directly', 'error'); }
+}
+
+// ════════════════════════════════════════════════════════
+// NAV + UI HELPERS
+// ════════════════════════════════════════════════════════
+function setActiveNav(el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function toast(msg, type = 'ok') {
+  const t = document.createElement('div');
+  t.style.cssText = `
+    position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
+    background:${type === 'error' ? 'var(--c-danger)' : 'var(--c-text)'};
+    color:#fff;padding:10px 20px;border-radius:var(--r-pill);font-size:14px;
+    z-index:9999;box-shadow:var(--shadow-md);animation:fadeInUp .2s ease;`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// ════════════════════════════════════════════════════════
+// ASSESSMENT (landing page Q card)
+// ════════════════════════════════════════════════════════
+// Already wired via selectOption() above
+
+// ════════════════════════════════════════════════════════
+// PANIC MODE + BREATHING
+// ════════════════════════════════════════════════════════
+let panicActive = false, breathingTimer = null, breathingStartedAt = null;
+const phases = [
+  { label: 'Breathe in', secs: 4, step: 'bs-in',   emoji: '🌿' },
+  { label: 'Hold',        secs: 4, step: 'bs-hold', emoji: '🫧' },
+  { label: 'Breathe out', secs: 4, step: 'bs-out',  emoji: '☁️' },
+];
+let phaseIdx = 0, countdown = 4;
+
+function togglePanic() {
+  panicActive = !panicActive;
+  const panicPage = document.getElementById('page-panic');
+  if (panicActive) {
+    document.body.classList.add('panic-mode');
+    panicPage.style.display = 'flex';
+    startBreathing();
+  } else {
+    document.body.classList.remove('panic-mode');
+    panicPage.style.display = 'none';
+    document.getElementById('page-dashboard').style.display = 'block';
+    stopBreathing();
+  }
+}
+
+function startBreathing() {
+  phaseIdx = 0; countdown = phases[0].secs;
+  breathingStartedAt = Date.now();
+  renderBreathPhase();
+  breathingTimer = setInterval(tickBreath, 1000);
+}
+
+function stopBreathing() {
+  clearInterval(breathingTimer);
+  const elapsed = breathingStartedAt ? Math.round((Date.now() - breathingStartedAt) / 1000) : 0;
+  breathingStartedAt = null;
+  // Only log a real completed breathing exercise — skip trivial/accidental taps
+  if (STATE.jwt && elapsed >= 8) {
+    api('POST', '/api/v1/exercise', { type: 'breathing', duration_secs: elapsed }).catch(() => {});
+  }
+}
+
+function renderBreathPhase() {
+  const p = phases[phaseIdx];
+  document.getElementById('panicInstruction').textContent = p.label;
+  document.getElementById('panicOrb').textContent = p.emoji;
+  document.getElementById('panicCounter').textContent = countdown;
+  phases.forEach((ph, i) =>
+    document.getElementById(ph.step).classList.toggle('active-breath', i === phaseIdx)
+  );
+}
+
+function tickBreath() {
+  countdown--;
+  if (countdown <= 0) { phaseIdx = (phaseIdx + 1) % phases.length; countdown = phases[phaseIdx].secs; }
+  renderBreathPhase();
+}
+
+// ════════════════════════════════════════════════════════
+// HABIT TRACKER
+// ════════════════════════════════════════════════════════
+function toggleHabit(el) {
+  const checked = el.classList.toggle('checked');
+  el.querySelector('.habit-check').textContent = checked ? '✓' : '';
+  el.querySelector('.habit-muted').textContent = checked ? 'Done today' : 'Not yet';
+  const done = document.querySelectorAll('.habit-item.checked').length;
+  if (done === 3) {
+    const sc = document.getElementById('streakCount');
+    if (sc) sc.textContent = String(parseInt(sc.textContent || '0') + 1);
+    document.querySelector('.streak-day.today').textContent = '✓';
+  }
+  // Log as an exercise if it's the breathing habit
+  if (checked && STATE.jwt && el.id === 'h3') {
+    api('POST', '/api/v1/exercise', { type: 'breathing', duration_secs: 0 }).catch(() => {});
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// MODE SWITCHER
+// ════════════════════════════════════════════════════════
+const modeData = {
+  empathic: {
+    desc: '<strong>Empathic Listener</strong> — Listens and validates without jumping to advice. Reflects back what you\'re saying. Use this when you need to vent first.',
+    tags: ['No unsolicited advice','Validation-first','Open-ended'],
+    inactive: ['Socratic Qs','Reframing','Exercises'],
+  },
+  socratic: {
+    desc: '<strong>Socratic Inquiry</strong> — Asks probing questions that guide you to your own answers. Never hands over the conclusion. Best for breaking loops.',
+    tags: ['Deep self-reflection','Question-driven','Root-cause focus'],
+    inactive: ['Validation-first','Exercises','CBT tools'],
+  },
+  grounding: {
+    desc: '<strong>Grounding Exercise</strong> — Pauses the conversation and walks you through 5-4-3-2-1 or box breathing when you\'re overwhelmed.',
+    tags: ['5-4-3-2-1 method','Breathing guide','Sensory anchoring'],
+    inactive: ['Deep analysis','Advice','Reframing'],
+  },
+  cbt: {
+    desc: '<strong>CBT Challenge</strong> — Identifies cognitive distortions in real time and walks you through structured thought records.',
+    tags: ['Distortion spotting','Thought records','Evidence checking'],
+    inactive: ['Passive listening','Grounding','Free-form'],
+  },
+};
+
+function switchMode(btn, mode) {
+  STATE.sessionMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const d = modeData[mode];
+  document.getElementById('modeDesc').innerHTML = d.desc;
+  const tagsEl = document.getElementById('modeTags');
+  tagsEl.innerHTML = '';
+  d.tags.forEach(t => { const s=document.createElement('span'); s.className='mode-tag active-tag'; s.textContent=t; tagsEl.appendChild(s); });
+  d.inactive.forEach(t => { const s=document.createElement('span'); s.className='mode-tag'; s.textContent=t; tagsEl.appendChild(s); });
+}
+
+// ════════════════════════════════════════════════════════
+// WIRE UP STATIC BUTTONS
+// ════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  loadState();
+
+  // "Get Started" / "Sign In" → check JWT
+  document.querySelectorAll('[onclick="showPage(\'onboarding\')"]').forEach(btn => {
+    btn.onclick = () => STATE.jwt ? showPage('onboarding') : showAuthModal('signup');
+  });
+  document.querySelectorAll('[onclick="showPage(\'dashboard\')"]').forEach(btn => {
+    btn.onclick = () => STATE.jwt ? showPage('dashboard') : showAuthModal('signin');
+  });
+
+  // PDF report button
+  document.querySelectorAll('[onclick*="report"]').forEach(btn => {
+    btn.onclick = generateReport;
+  });
+
+  // Crisis alert button (third crisis-num button)
+  const alertBtn = document.querySelectorAll('.crisis-num')[2];
+  if (alertBtn) alertBtn.onclick = sendCrisisAlert;
+
+  // Session start buttons
+  document.querySelectorAll('.session-card .btn').forEach((btn, i) => {
+    btn.onclick = () => { STATE.sessionMode = i === 0 ? STATE.sessionMode : STATE.sessionMode; startChatSession(); };
+  });
+
+  // Mode switcher start button
+  document.querySelectorAll('.dash-card .btn-primary').forEach(btn => {
+    if (btn.textContent.includes('mode')) btn.onclick = startChatSession;
+  });
+
+  // Mood log button
+  document.querySelectorAll('.mood-bar .btn-outline').forEach(btn => {
+    btn.onclick = logMood;
+  });
+
+  // Therapist finder
+  document.querySelectorAll('[onclick*="therapist"], .nav-item').forEach(btn => {
+    if (btn.textContent.includes('Find Therapist')) btn.onclick = findTherapists;
+  });
+
+  // Service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+});
+</script>
+</body>
+</html>
