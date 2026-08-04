@@ -24,9 +24,16 @@ from pdf_generator       import generate_pdf
 
 # ── app ───────────────────────────────────────────────────
 app = FastAPI(title="MindEase API", version="1.1.0")
+
+ALLOWED_ORIGINS = [
+    "https://aravworks.github.io",   # production frontend (GitHub Pages)
+    "http://localhost:3000",         # local frontend dev (python -m http.server)
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"],
 )
 
 # ── clients ───────────────────────────────────────────────
