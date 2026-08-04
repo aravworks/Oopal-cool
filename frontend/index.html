@@ -1454,31 +1454,51 @@ function pickTheme(el, theme) {
 // ════════════════════════════════════════════════════════
 // ASSESSMENT
 // ════════════════════════════════════════════════════════
+// Each option carries a rough severity weight (1 = milder signal, 3 = stronger
+// signal e.g. rumination / no coping mechanism found yet). Summed across all
+// 3 answers this gives a severity_score in the 3-9 range instead of a static
+// guess — still a soft self-report proxy, not a validated clinical scale.
 const ASSESSMENT_QS = [
   {
     q: 'When during the day do you feel your lowest?',
-    opts: ['Morning — I dread getting up', 'Afternoon — everything feels heavy',
-           'Evening — thoughts spiral at night', "It's random, unpredictable"],
+    opts: [
+      { text: 'Morning — I dread getting up',      weight: 2 },
+      { text: 'Afternoon — everything feels heavy', weight: 2 },
+      { text: 'Evening — thoughts spiral at night',  weight: 3 },
+      { text: "It's random, unpredictable",          weight: 3 },
+    ],
   },
   {
     q: 'What kind of thoughts repeat most often?',
-    opts: ['Worrying about what others think', 'Feeling behind or not good enough',
-           'Struggling to focus or follow through', 'Replaying things that went wrong'],
+    opts: [
+      { text: 'Worrying about what others think',        weight: 2 },
+      { text: 'Feeling behind or not good enough',        weight: 2 },
+      { text: 'Struggling to focus or follow through',    weight: 2 },
+      { text: 'Replaying things that went wrong',         weight: 3 },
+    ],
   },
   {
     q: "What's helped you even a little before?",
-    opts: ['Talking to someone I trust', 'Getting outside or moving',
-           'Journaling or writing things out', 'Honestly, nothing yet'],
+    opts: [
+      { text: 'Talking to someone I trust',        weight: 1 },
+      { text: 'Getting outside or moving',          weight: 1 },
+      { text: 'Journaling or writing things out',   weight: 1 },
+      { text: 'Honestly, nothing yet',              weight: 3 },
+    ],
   },
 ];
 
 let assessmentStep = 0;
+let severityPoints = 0;
 const assessmentAnswers = {};
 
 function selectOption(el) {
   el.closest('.q-options').querySelectorAll('.q-option').forEach(o => o.classList.remove('selected'));
   el.classList.add('selected');
-  assessmentAnswers[ASSESSMENT_QS[assessmentStep].q] = el.textContent.trim();
+  const text = el.textContent.trim();
+  assessmentAnswers[ASSESSMENT_QS[assessmentStep].q] = text;
+  const optData = ASSESSMENT_QS[assessmentStep].opts.find(o => o.text === text);
+  severityPoints += optData ? optData.weight : 2;
   // Auto-advance after short delay
   setTimeout(() => advanceAssessment(), 400);
 }
@@ -1506,7 +1526,7 @@ function renderAssessmentQ() {
   if (text)  text.textContent  = qData.q;
   if (opts) {
     opts.innerHTML = qData.opts.map(o =>
-      `<button class="q-option" onclick="selectOption(this)">${o}</button>`
+      `<button class="q-option" onclick="selectOption(this)">${o.text}</button>`
     ).join('');
   }
 }
@@ -1520,7 +1540,9 @@ async function finishAssessment() {
     answers.includes('spiral') || answers.includes('evening')        ? 'anxiety' :
     'stress';
 
-  const diagPayload = { condition, severity_score: 6, answers_json: assessmentAnswers };
+  const severity_score = Math.min(10, Math.max(1, severityPoints));
+
+  const diagPayload = { condition, severity_score, answers_json: assessmentAnswers };
 
   if (STATE.jwt) {
     try {
@@ -1533,6 +1555,9 @@ async function finishAssessment() {
     localStorage.setItem('me_pending_diagnosis', JSON.stringify(diagPayload));
     STATE.condition = condition;
   }
+  // Reset for a possible retake
+  assessmentStep = 0;
+  severityPoints = 0;
   showPage('onboarding');
 }
 
