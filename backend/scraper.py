@@ -1,160 +1,185 @@
 """
-MindEase — Therapist Scraper
-Scrapes Practo for therapists matching the user's condition and city.
-Falls back to a curated static list if scraping is blocked.
+MindEase — Therapist Finder via Google News + Gemini analysis
 
-CONDITION → SPECIALTY MAPPING:
-  anxiety  → Anxiety Disorders, CBT, Stress Management
-  adhd     → ADHD, Attention Deficit, Child & Adolescent Psychiatry
-  stress   → Stress Management, Work-Life Balance, Burnout
-  sleep    → Sleep Disorders, Insomnia, CBT for Insomnia
+Practo and JustDial both run active anti-bot protection (DataDome-style
+cryptographic challenges, TLS-fingerprint blocking) that blocks both plain
+requests and real headless-browser automation — confirmed by direct testing,
+not assumption. Scraping Google Search/Maps results directly is against
+Google's ToS and gets blocked even harder.
+
+Instead: search Google News' public RSS feed (a documented, non-adversarial
+endpoint — no anti-bot circumvention involved) for real news coverage naming
+real therapists/psychologists (awards, recognition, feature articles), then
+ask Gemini to identify which articles actually name a specific professional
+and how relevant they are to the user's condition — extracting ONLY what's
+stated in the article, never fabricating contact details, fees, or ratings.
+The city is geocoded via OpenStreetMap's Nominatim for an approximate map
+pin (not the therapist's exact clinic address, which we don't have).
+
+If no real, named therapist turns up in recent news for a city, this
+returns an empty list — no fake fallback profiles. Coverage will be patchy
+for smaller cities/conditions; that's an honest limitation, not a bug.
 """
 
-import os
+import re
 import json
-import asyncio
-import requests
-from bs4 import BeautifulSoup
+import html
+import random
+import urllib.parse
+import xml.etree.ElementTree as ET
 
-# Condition → Practo search query mapping
+import requests
+import google.generativeai as genai
+from gemini_system_prompt import generate_with_fallback, GEMINI_CALL_TIMEOUT
+
+NEWS_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+NOMINATIM_UA = "MindEase-CollegeProject/1.0 (non-commercial demo; contact via GitHub)"
+
 CONDITION_QUERIES = {
     "anxiety": "anxiety therapist",
     "adhd":    "ADHD psychologist",
     "stress":  "stress counsellor",
-    "sleep":   "sleep disorder psychologist",
-}
-
-CONDITION_TAGS = {
-    "anxiety": ["Anxiety", "CBT", "Panic Disorder", "OCD"],
-    "adhd":    ["ADHD", "Attention Deficit", "Executive Function"],
-    "stress":  ["Stress", "Burnout", "Work-Life Balance"],
-    "sleep":   ["Insomnia", "Sleep Disorders", "CBT-I"],
-}
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    )
+    "sleep":   "sleep therapist",
 }
 
 
-def scrape_practo(city: str, condition: str) -> list[dict]:
-    """
-    Scrape Practo search results for therapists.
-    Returns list of therapist dicts.
-    """
-    query   = CONDITION_QUERIES.get(condition, "therapist")
-    city_q  = city.lower().replace(" ", "-")
-    url     = f"https://www.practo.com/{city_q}/therapist?specialization={query.replace(' ', '%20')}"
+def _fetch_news_items(query: str, limit: int = 12) -> list[dict]:
+    """Query Google News' public RSS search feed. Returns real article metadata."""
+    url = f"https://news.google.com/rss/search?q={urllib.parse.quote(query)}&hl=en-IN&gl=IN&ceid=IN:en"
+    resp = requests.get(url, headers={"User-Agent": NEWS_UA}, timeout=10)
+    resp.raise_for_status()
+    root = ET.fromstring(resp.text)
 
+    items = []
+    for item in root.findall(".//item")[:limit]:
+        title = (item.findtext("title") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        pub_date = (item.findtext("pubDate") or "").strip()
+        desc_raw = html.unescape(item.findtext("description") or "")
+        # RSS description is usually '<a href="...">TITLE</a>&nbsp;&nbsp;<font ...>SOURCE</font>'
+        m = re.search(r">([^<]+)</a>\s*(.*)$", desc_raw)
+        source = re.sub(r"<[^>]+>", "", m.group(2)).strip() if m else ""
+        if title:
+            items.append({"title": title, "link": link, "source": source, "pub_date": pub_date})
+    return items
+
+
+def _geocode_city(city: str) -> dict | None:
+    """Approximate city-level coordinates via OpenStreetMap's Nominatim — not
+    the therapist's exact address, which we have no reliable source for."""
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=10)
+        resp = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"city": city, "country": "India", "format": "json", "limit": 1},
+            headers={"User-Agent": NOMINATIM_UA},
+            timeout=8,
+        )
         resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "lxml")
-
-        therapists = []
-        cards = soup.select("div[data-qa-id='doctor_card']")[:8]
-
-        for card in cards:
-            try:
-                name_el       = card.select_one("[data-qa-id='doctor_name']")
-                rating_el     = card.select_one("[data-qa-id='doctor_rating']")
-                specialty_el  = card.select_one("[data-qa-id='doctor_specialization']")
-                exp_el        = card.select_one("[data-qa-id='doctor_experience']")
-                fee_el        = card.select_one("[data-qa-id='doctor_fee']")
-                locality_el   = card.select_one("[data-qa-id='practice_locality']")
-
-                name     = name_el.get_text(strip=True)     if name_el     else "Unknown"
-                rating   = rating_el.get_text(strip=True)   if rating_el   else "N/A"
-                fee      = fee_el.get_text(strip=True)       if fee_el      else "Contact for fee"
-                locality = locality_el.get_text(strip=True) if locality_el else city
-
-                # Only include highly-rated (4.5+)
-                try:
-                    rating_float = float(rating.replace("(", "").replace(")", "").split()[0])
-                    if rating_float < 4.5:
-                        continue
-                except (ValueError, IndexError):
-                    pass
-
-                therapists.append({
-                    "name":       name,
-                    "specialty":  specialty_el.get_text(strip=True) if specialty_el else "Therapist",
-                    "rating":     rating,
-                    "experience": exp_el.get_text(strip=True) if exp_el else "",
-                    "fee":        fee,
-                    "location":   f"{locality}, {city}",
-                    "tags":       CONDITION_TAGS.get(condition, []),
-                    "source":     "practo",
-                })
-            except Exception:
-                continue
-
-        return therapists[:5]
-
-    except Exception as e:
-        print(f"Scraper error: {e}")
-        return []
-
-
-def get_fallback_therapists(city: str, condition: str) -> list[dict]:
-    """
-    Static fallback list when scraping is blocked.
-    Shows realistic data for demo purposes.
-    """
-    base = [
-        {
-            "name":       "Dr. Priya Sharma",
-            "specialty":  "Clinical Psychologist",
-            "rating":     "4.9",
-            "experience": "12 years",
-            "fee":        "₹800/session",
-            "location":   f"{city}",
-            "phone":      "+91-9XXXXXXXXX",
-            "tags":       CONDITION_TAGS.get(condition, []),
-            "source":     "fallback",
-            "lat":        None,
-            "lng":        None,
-        },
-        {
-            "name":       "Dr. Rohit Agarwal",
-            "specialty":  "Psychiatrist",
-            "rating":     "4.7",
-            "experience": "8 years",
-            "fee":        "₹1,200/session",
-            "location":   f"{city}",
-            "phone":      "+91-9XXXXXXXXX",
-            "tags":       CONDITION_TAGS.get(condition, []),
-            "source":     "fallback",
-            "lat":        None,
-            "lng":        None,
-        },
-        {
-            "name":       "Ms. Neha Kapoor",
-            "specialty":  "Counselling Psychologist",
-            "rating":     "4.8",
-            "experience": "6 years",
-            "fee":        "₹600/session",
-            "location":   f"{city}",
-            "phone":      "+91-9XXXXXXXXX",
-            "tags":       CONDITION_TAGS.get(condition, []),
-            "source":     "fallback",
-            "lat":        None,
-            "lng":        None,
-        },
-    ]
-    return base
+        data = resp.json()
+        if not data:
+            return None
+        return {"lat": float(data[0]["lat"]), "lng": float(data[0]["lon"])}
+    except Exception:
+        return None
 
 
 def find_therapists(city: str, condition: str) -> list[dict]:
     """
-    Main entry point.
-    Tries scraping first, falls back to static list.
-    Called by POST /api/v1/therapist/search
+    Main entry point. Called by POST /api/v1/therapist/search.
+    Returns real, named therapists found in real news coverage, each with
+    an approximate city-level map pin. Empty list if nothing genuine found —
+    no fabricated profiles.
     """
-    results = scrape_practo(city, condition)
-    if not results:
-        results = get_fallback_therapists(city, condition)
+    keyword = CONDITION_QUERIES.get(condition, "therapist")
+    queries = [
+        f'"{city}" {keyword} recognition award',
+        f'"{city}" psychologist felicitated OR honoured OR awarded',
+    ]
+
+    seen_links = set()
+    items = []
+    for q in queries:
+        try:
+            for it in _fetch_news_items(q):
+                if it["link"] and it["link"] not in seen_links:
+                    seen_links.add(it["link"])
+                    items.append(it)
+        except Exception as e:
+            print(f"[scraper] news fetch failed for query '{q}': {e}")
+
+    if not items:
+        return []
+
+    numbered = "\n".join(
+        f"{i+1}. TITLE: {it['title']}\n   SOURCE: {it['source']}\n   DATE: {it['pub_date']}"
+        for i, it in enumerate(items)
+    )
+
+    prompt = f"""You are screening real news headlines to find therapists, psychologists,
+psychiatrists, or counsellors who could help someone dealing with {condition},
+based in or near {city}.
+
+For each numbered item, decide if it names a SPECIFIC real person or named
+clinic/wellness-center (not a generic mental-health-awareness piece with no
+professional named). If it does, extract ONLY what the title/source actually
+states — never invent a phone number, address, fee, or rating that isn't there.
+
+Return a JSON array (max 5 items, most relevant to {condition} first). Each object:
+{{
+  "name": "the person's name, or clinic/center name if no individual is named",
+  "specialty_note": "short phrase from the headline on why they're notable",
+  "relevance_to_condition": "one short sentence on why this fits someone with {condition}",
+  "item_number": <the numbered item this came from, integer>
+}}
+
+If none of the items name a real therapist/psychologist/clinic, return [].
+JSON only, no markdown.
+
+Items:
+{numbered}
+"""
+
+    try:
+        resp = generate_with_fallback(
+            lambda name: genai.GenerativeModel(name).generate_content(
+                prompt, request_options={"timeout": GEMINI_CALL_TIMEOUT}
+            )
+        )
+        raw = resp.text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        matches = json.loads(raw)
+    except Exception as e:
+        print(f"[scraper] Gemini analysis failed: {e}")
+        matches = []
+
+    if not matches:
+        return []
+
+    geo = _geocode_city(city)
+    results = []
+    for m in matches[:5]:
+        idx = (m.get("item_number") or 0) - 1
+        source_item = items[idx] if 0 <= idx < len(items) else {}
+        lat = lng = None
+        if geo:
+            # Small jitter so multiple pins in one city don't stack exactly —
+            # this is an approximate area pin, not a precise clinic address.
+            lat = geo["lat"] + random.uniform(-0.01, 0.01)
+            lng = geo["lng"] + random.uniform(-0.01, 0.01)
+        results.append({
+            "name":        m.get("name", "").strip() or "Unnamed in article",
+            "specialty":   m.get("specialty_note", "").strip(),
+            "relevance":   m.get("relevance_to_condition", "").strip(),
+            "source":      source_item.get("source", ""),
+            "article_url": source_item.get("link"),
+            "location":    city,
+            "lat":         lat,
+            "lng":         lng,
+        })
     return results

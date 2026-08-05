@@ -531,8 +531,9 @@ async def transcribe_voice(
 @app.post("/api/v1/therapist/search")
 def search_therapists(body: TherapistSearchRequest, user=Depends(get_current_user)):
     """
-    Scrape Practo for therapists matching the user's diagnosis + city.
-    Falls back to curated static list if scraping is blocked.
+    Find real, named therapists via Google News coverage matching the
+    user's diagnosis + city, analysed for relevance by Gemini. No
+    fabricated fallback data — empty list if nothing genuine is found.
     """
     condition = body.condition
     if not condition:

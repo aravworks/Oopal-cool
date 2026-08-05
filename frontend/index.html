@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MindEase — Your Mental Wellness Space</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <style>
   /* ── TOKENS ──────────────────────────────────────────── */
   :root {
@@ -459,16 +463,6 @@
   .t-rating { margin-left: auto; font-size: 13px; font-weight: 600; color: #D97706;
               white-space: nowrap; flex-shrink: 0; }
 
-  /* Map placeholder */
-  .map-placeholder {
-    background: linear-gradient(135deg, #E8F4F8, #D4E8F0);
-    border-radius: 12px; height: 140px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; color: var(--c-muted);
-    border: 1px dashed var(--c-primary); margin-top: 16px;
-    flex-direction: column; gap: 6px;
-  }
-  .map-placeholder .map-icon { font-size: 28px; }
 
   /* Voice recorder */
   .voice-recorder {
@@ -1099,19 +1093,20 @@
 
       <!-- ═══════════════════ FIND THERAPIST ═══════════════════ -->
       <div class="content-section" id="section-therapist" style="display:none;">
-        <div class="greeting"><h2>Find Therapist</h2><p>Matched to your diagnosis, filtered by rating.</p></div>
+        <div class="greeting"><h2>Find Therapist</h2><p>Real professionals found in recent news coverage, matched to your diagnosis.</p></div>
         <div class="dash-card">
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
-            <input id="therapistCityInput" placeholder="Your city (e.g. Kanpur)" value="Kanpur"
+            <input id="therapistCityInput" placeholder="Your city (e.g. Delhi)" value="Delhi"
                    style="flex:1;min-width:180px;padding:11px 14px;border-radius:10px;border:1.5px solid var(--c-border);
                           font-family:var(--font-body);font-size:14px;background:var(--c-bg);color:var(--c-text);outline:none;">
             <button class="btn btn-primary" onclick="findTherapists()">🔍 Search</button>
           </div>
+          <p style="font-size:11px;color:var(--c-muted);margin-bottom:14px;">
+            Sourced from real news coverage (awards, recognition, features) — not a directory listing.
+            Coverage can be thin for smaller cities; pins are approximate (city-level, not exact clinic addresses).
+          </p>
           <div id="therapistResultsList"><div class="empty-state">Search to see matched therapists here.</div></div>
-          <div class="map-placeholder">
-            <div class="map-icon">📍</div>
-            <div>OpenStreetMap · Nearest clinics pinned</div>
-          </div>
+          <div id="therapistMap" style="height:240px;border-radius:12px;margin-top:16px;display:none;"></div>
         </div>
       </div>
 
@@ -2224,34 +2219,73 @@ async function transcribeIntoChatInput(stream) {
 // ════════════════════════════════════════════════════════
 async function findTherapists() {
   if (!STATE.jwt) { showAuthModal('signin'); return; }
-  const city = document.getElementById('therapistCityInput')?.value.trim() || 'Kanpur';
+  const city = document.getElementById('therapistCityInput')?.value.trim() || 'Delhi';
   const listEl = document.getElementById('therapistResultsList');
-  if (listEl) listEl.innerHTML = `<div class="empty-state">Searching…</div>`;
+  if (listEl) listEl.innerHTML = `<div class="empty-state">Searching recent news coverage…</div>`;
   try {
     const { therapists } = await api('POST', '/api/v1/therapist/search', {
       city, condition: STATE.condition || '',
     });
-    renderTherapists(therapists);
+    renderTherapists(therapists, city);
   } catch (e) {
     if (listEl) listEl.innerHTML = `<div class="empty-state">Search failed: ${e.message}</div>`;
   }
 }
 
-function renderTherapists(list) {
+let therapistLeafletMap = null;
+
+function renderTherapists(list, city) {
   const el = document.getElementById('therapistResultsList');
+  const mapEl = document.getElementById('therapistMap');
   if (!el) return;
-  if (!list.length) { el.innerHTML = `<div class="empty-state">No matches found — try a different city.</div>`; return; }
+
+  if (!list.length) {
+    el.innerHTML = `<div class="empty-state">No named therapists turned up in recent news for "${city}". Coverage varies a lot by city — try a nearby major city, or check back later as new articles get indexed.</div>`;
+    if (mapEl) mapEl.style.display = 'none';
+    return;
+  }
+
   el.innerHTML = list.map(t => `
     <div class="therapist-card">
       <div class="t-avatar">👨‍⚕️</div>
       <div class="t-info">
         <h4>${t.name}</h4>
-        <p>${t.specialty} · ${t.location} · ${t.fee}</p>
-        <div class="t-tags">${(t.tags||[]).map(tag=>`<span class="t-tag">${tag}</span>`).join('')}</div>
+        <p>${t.specialty}</p>
+        <p style="font-size:11px;color:var(--c-muted);">${t.relevance}</p>
+        <div class="t-tags">
+          <span class="t-tag">${t.location}</span>
+          ${t.source ? `<span class="t-tag">${t.source}</span>` : ''}
+        </div>
       </div>
-      <div class="t-rating">⭐ ${t.rating}</div>
+      ${t.article_url ? `<a href="${t.article_url}" target="_blank" rel="noopener" class="t-rating" style="text-decoration:none;font-size:11px;">Read article →</a>` : ''}
     </div>`).join('');
-  toast(`Found ${list.length} therapists`);
+  toast(`Found ${list.length} therapists in recent news`);
+
+  const withPins = list.filter(t => t.lat && t.lng);
+  if (!withPins.length || typeof L === 'undefined') {
+    if (mapEl) mapEl.style.display = 'none';
+    return;
+  }
+
+  mapEl.style.display = 'block';
+  if (!therapistLeafletMap) {
+    therapistLeafletMap = L.map('therapistMap');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 18,
+    }).addTo(therapistLeafletMap);
+  } else {
+    therapistLeafletMap.eachLayer(layer => { if (layer instanceof L.Marker) therapistLeafletMap.removeLayer(layer); });
+  }
+
+  const bounds = [];
+  withPins.forEach(t => {
+    const marker = L.marker([t.lat, t.lng]).addTo(therapistLeafletMap);
+    marker.bindPopup(`<strong>${t.name}</strong><br>${t.specialty}`);
+    bounds.push([t.lat, t.lng]);
+  });
+  therapistLeafletMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
+  setTimeout(() => therapistLeafletMap.invalidateSize(), 100); // section was display:none until now
 }
 
 // ════════════════════════════════════════════════════════
