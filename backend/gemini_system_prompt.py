@@ -18,25 +18,41 @@ GEMINI_MODEL_FALLBACK_CHAIN = [
 ]
 
 
-def _is_rate_limit_error(exc: Exception) -> bool:
-    s = str(exc)
-    return "429" in s or "RESOURCE_EXHAUSTED" in s or "quota" in s.lower()
+# GEMINI_CALL_TIMEOUT caps how long a single model attempt can take before
+# we give up on it and move to the next one. Without this, the SDK's own
+# retry/backoff on a transient error (e.g. 503 "high demand") can hang for
+# a long time before ever raising — which made the whole fallback chain
+# pointless in practice, since we'd time out long before reaching model #2.
+GEMINI_CALL_TIMEOUT = 20  # seconds
+
+
+def _is_transient_error(exc: Exception) -> bool:
+    """True for errors worth retrying on a different model: quota exhaustion
+    (429) as well as transient service issues (503 'high demand', deadline
+    exceeded, etc) — not just rate limits."""
+    s = str(exc).upper()
+    return any(token in s for token in (
+        "429", "RESOURCE_EXHAUSTED", "QUOTA",
+        "503", "UNAVAILABLE", "OVERLOADED", "HIGH DEMAND",
+        "DEADLINE_EXCEEDED", "504", "TIMEOUT",
+    ))
 
 
 def generate_with_fallback(build_and_call, models: list[str] | None = None):
     """
     Try each model in GEMINI_MODEL_FALLBACK_CHAIN until one succeeds.
     `build_and_call(model_name)` must construct the GenerativeModel and make
-    the actual call, returning its result. Only rate-limit errors trigger a
-    fallback to the next model — any other exception (bad prompt, auth, etc.)
-    is raised immediately since retrying with a different model won't fix it.
+    the actual call, returning its result. Only transient errors (quota,
+    service overload, timeout) trigger a fallback to the next model — any
+    other exception (bad prompt, auth, etc.) is raised immediately since
+    retrying with a different model won't fix it.
     """
     last_err = None
     for name in (models or GEMINI_MODEL_FALLBACK_CHAIN):
         try:
             return build_and_call(name)
         except Exception as e:
-            if _is_rate_limit_error(e):
+            if _is_transient_error(e):
                 last_err = e
                 continue
             raise

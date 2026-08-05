@@ -16,7 +16,7 @@ from openai import OpenAI
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
 
 import google.generativeai as genai
-from gemini_system_prompt import generate_with_fallback
+from gemini_system_prompt import generate_with_fallback, GEMINI_CALL_TIMEOUT
 
 
 # ── Step 1: Transcribe ────────────────────────────────────────────────────────
@@ -126,7 +126,11 @@ Transcript:
 JSON only, no markdown:"""
 
     try:
-        resp = generate_with_fallback(lambda name: genai.GenerativeModel(name).generate_content(prompt))
+        resp = generate_with_fallback(
+            lambda name: genai.GenerativeModel(name).generate_content(
+                prompt, request_options={"timeout": GEMINI_CALL_TIMEOUT}
+            )
+        )
         raw  = resp.text.strip()
         # Strip markdown fences if present
         if raw.startswith("```"):

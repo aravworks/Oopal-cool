@@ -8,6 +8,11 @@ import os
 import google.generativeai as genai
 from gemini_system_prompt import generate_with_fallback
 
+# Crisis classification runs on every message — keep it fast. If Gemini is
+# slow/unavailable across the whole fallback chain, fail safe (see except
+# below) rather than blocking the user's message for a long time.
+_CLASSIFY_TIMEOUT = 8  # seconds
+
 # ── Keyword list ──────────────────────────────────────────────────────────────
 # English + common Hinglish crisis phrases
 CRISIS_KEYWORDS = [
@@ -62,7 +67,11 @@ Analyse the message below and answer ONLY with one of these three words:
 Message: "{text}"
 
 Your answer (one word only):"""
-        resp = generate_with_fallback(lambda name: genai.GenerativeModel(name).generate_content(prompt))
+        resp = generate_with_fallback(
+            lambda name: genai.GenerativeModel(name).generate_content(
+                prompt, request_options={"timeout": _CLASSIFY_TIMEOUT}
+            )
+        )
         label = resp.text.strip().upper().split()[0]
         return {
             "crisis":     label == "CRISIS",

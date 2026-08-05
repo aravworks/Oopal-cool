@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── local modules ─────────────────────────────────────────
-from gemini_system_prompt import build_system_prompt, get_time_context, generate_with_fallback
+from gemini_system_prompt import build_system_prompt, get_time_context, generate_with_fallback, GEMINI_CALL_TIMEOUT
 from gemini_modes        import get_mode_prompt
 from crisis_guardrail    import check_message, send_emergency_alert
 from ser_analysis        import process_voice_input
@@ -124,7 +124,9 @@ Conversation:
 Insight (first person, 1-2 sentences only):
 """
     insight_resp = generate_with_fallback(
-        lambda name: genai.GenerativeModel(name).generate_content(insight_prompt)
+        lambda name: genai.GenerativeModel(name).generate_content(
+            insight_prompt, request_options={"timeout": GEMINI_CALL_TIMEOUT}
+        )
     )
     insight = insight_resp.text.strip().strip('"')
 
@@ -275,7 +277,10 @@ def start_session(body: StartSessionRequest, user=Depends(get_current_user)):
     opening = generate_with_fallback(
         lambda name: genai.GenerativeModel(name, system_instruction=system_prompt)
             .start_chat(history=[])
-            .send_message("Start the session with your opening question. One sentence, warm and direct.")
+            .send_message(
+                "Start the session with your opening question. One sentence, warm and direct.",
+                request_options={"timeout": GEMINI_CALL_TIMEOUT},
+            )
     )
 
     return {
@@ -365,7 +370,7 @@ def send_message(body: ChatMessageRequest, user=Depends(get_current_user)):
     response = generate_with_fallback(
         lambda name: genai.GenerativeModel(name, system_instruction=system_prompt)
             .start_chat(history=body.history)
-            .send_message(body.message)
+            .send_message(body.message, request_options={"timeout": GEMINI_CALL_TIMEOUT})
     )
     reply = response.text.strip()
 
@@ -615,7 +620,9 @@ Insights:
 Top themes/triggers:
 """
     trigger_resp = generate_with_fallback(
-        lambda name: genai.GenerativeModel(name).generate_content(trigger_prompt)
+        lambda name: genai.GenerativeModel(name).generate_content(
+            trigger_prompt, request_options={"timeout": GEMINI_CALL_TIMEOUT}
+        )
     )
     top_triggers = [
         line.strip() for line in trigger_resp.text.strip().split("\n")
