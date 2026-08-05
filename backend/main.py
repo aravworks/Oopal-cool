@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── local modules ─────────────────────────────────────────
-from gemini_system_prompt import build_system_prompt, get_time_context
+from gemini_system_prompt import build_system_prompt, get_time_context, generate_with_fallback
 from gemini_modes        import get_mode_prompt
 from crisis_guardrail    import check_message, send_emergency_alert
 from ser_analysis        import process_voice_input
@@ -61,15 +61,17 @@ def get_current_user(authorization: str = Header(...)):
 
 # ─── helper: fetch profile + diagnosis + past insights ───
 
-def _get_session_context(user_id: str, diagnosis_id: str) -> dict:
-    """One call to assemble everything Gemini needs."""
+def _get_session_context(user_id: str, diagnosis_id: str | None) -> dict:
+    """One call to assemble everything Gemini needs. diagnosis_id may be None —
+    the assessment is optional, sessions can start without one."""
     profile = supabase.table("profiles").select("name").eq("id", user_id).single().execute()
     user_name = (profile.data or {}).get("name", "there")
 
-    diag = supabase.table("diagnoses").select("condition").eq("id", diagnosis_id).single().execute()
-    if not diag.data:
-        raise HTTPException(404, "Diagnosis not found")
-    condition = diag.data["condition"]
+    if diagnosis_id:
+        diag = supabase.table("diagnoses").select("condition").eq("id", diagnosis_id).single().execute()
+        condition = diag.data["condition"] if diag.data else "stress"
+    else:
+        condition = "stress"   # generic overlay when no assessment has been done yet
 
     past = (
         supabase.table("sessions")
@@ -106,8 +108,7 @@ def _finalize_session(
         if m.get("parts")
     )
 
-    model = genai.GenerativeModel("gemini-flash-latest")
-    insight_resp = model.generate_content(f"""
+    insight_prompt = f"""
 This was a cognitive therapy session. Extract the single most important insight
 the user arrived at. Write it in FIRST PERSON, 1-2 sentences, like a journal entry.
 No therapy-speak. Write AS them, not about them.
@@ -121,7 +122,10 @@ Conversation:
 {convo_text}
 
 Insight (first person, 1-2 sentences only):
-""")
+"""
+    insight_resp = generate_with_fallback(
+        lambda name: genai.GenerativeModel(name).generate_content(insight_prompt)
+    )
     insight = insight_resp.text.strip().strip('"')
 
     supabase.table("sessions").update({
@@ -150,7 +154,7 @@ class DiagnosisRequest(BaseModel):
     answers_json: dict
 
 class StartSessionRequest(BaseModel):
-    diagnosis_id: str
+    diagnosis_id: str | None = None   # assessment is optional
     mode: str = "empathic"   # empathic | socratic | grounding | cbt
 
 class ChatMessageRequest(BaseModel):
@@ -161,8 +165,8 @@ class ChatMessageRequest(BaseModel):
 
 class EndSessionRequest(BaseModel):
     session_id: str
-    mood_before: int
-    mood_after: int
+    mood_before: int | None = None
+    mood_after: int | None = None
     history: list[dict]
 
 class MoodLogRequest(BaseModel):
@@ -190,6 +194,20 @@ class EmergencyAlertRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "mindease-api", "version": "1.1.0"}
+
+
+# ═════════════════════════════════════════════════════════
+# PROFILE
+# ═════════════════════════════════════════════════════════
+
+@app.get("/api/v1/profile")
+def get_profile(user=Depends(get_current_user)):
+    profile = supabase.table("profiles").select("name, created_at").eq("id", user.id).single().execute()
+    return {
+        "name":       (profile.data or {}).get("name", "there"),
+        "email":      user.email,
+        "created_at": (profile.data or {}).get("created_at"),
+    }
 
 
 # ═════════════════════════════════════════════════════════
@@ -254,9 +272,10 @@ def start_session(body: StartSessionRequest, user=Depends(get_current_user)):
     }).execute()
     session_id = session.data[0]["id"]
 
-    model = genai.GenerativeModel("gemini-flash-latest", system_instruction=system_prompt)
-    opening = model.start_chat(history=[]).send_message(
-        "Start the session with your opening question. One sentence, warm and direct."
+    opening = generate_with_fallback(
+        lambda name: genai.GenerativeModel(name, system_instruction=system_prompt)
+            .start_chat(history=[])
+            .send_message("Start the session with your opening question. One sentence, warm and direct.")
     )
 
     return {
@@ -343,10 +362,12 @@ def send_message(body: ChatMessageRequest, user=Depends(get_current_user)):
         + distress_note
     )
 
-    model    = genai.GenerativeModel("gemini-flash-latest", system_instruction=system_prompt)
-    chat     = model.start_chat(history=body.history)
-    response = chat.send_message(body.message)
-    reply    = response.text.strip()
+    response = generate_with_fallback(
+        lambda name: genai.GenerativeModel(name, system_instruction=system_prompt)
+            .start_chat(history=body.history)
+            .send_message(body.message)
+    )
+    reply = response.text.strip()
 
     # ── 50-minute soft warning (session still open, cap is close) ──
     if timedelta(minutes=50) < session_age <= timedelta(hours=1):
@@ -583,8 +604,7 @@ def generate_report(user=Depends(get_current_user)):
         f"- {s['insight']}" for s in session_rows if s.get("insight")
     ) or "No session insights yet."
 
-    trigger_model = genai.GenerativeModel("gemini-flash-latest")
-    trigger_resp  = trigger_model.generate_content(f"""
+    trigger_prompt = f"""
 Based on these session insights from a person with {condition}, list the top 3-5
 recurring themes or triggers as short phrases (5-8 words each).
 No bullet symbols, no numbers — just one phrase per line.
@@ -593,7 +613,10 @@ Insights:
 {insights_text}
 
 Top themes/triggers:
-""")
+"""
+    trigger_resp = generate_with_fallback(
+        lambda name: genai.GenerativeModel(name).generate_content(trigger_prompt)
+    )
     top_triggers = [
         line.strip() for line in trigger_resp.text.strip().split("\n")
         if line.strip()

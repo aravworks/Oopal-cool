@@ -67,7 +67,7 @@ CREATE POLICY "Users insert own diagnoses"
 CREATE TABLE sessions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    diagnosis_id    UUID NOT NULL REFERENCES diagnoses(id),
+    diagnosis_id    UUID REFERENCES diagnoses(id),   -- nullable: assessment is optional
     chat_log_json   JSONB,           -- full conversation history
     insight         TEXT,            -- AI-generated session insight (the "cure")
     mood_before     INT CHECK (mood_before BETWEEN 1 AND 5),

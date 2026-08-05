@@ -64,23 +64,25 @@
   .page-panic     { display: none; flex-direction: column; align-items: center;
                     justify-content: center; min-height: 100vh; padding: 40px 24px; }
 
-  /* ── FLOATING PANIC BUTTON ───────────────────────────── */
+  /* ── FLOATING PANIC BUTTON (AssistiveTouch-style, draggable) ──── */
   .panic-btn {
     position: fixed;
-    bottom: 28px; right: 28px;
     width: 56px; height: 56px;
     border-radius: 50%;
     background: var(--c-surface);
     border: 2px solid var(--c-danger);
     color: var(--c-danger);
     font-size: 22px;
-    cursor: pointer;
+    cursor: grab;
     display: flex; align-items: center; justify-content: center;
     box-shadow: var(--shadow-md);
     z-index: 10000;
-    transition: transform var(--transition), box-shadow var(--transition);
+    touch-action: none;   /* we handle drag ourselves, incl. on touch */
+    user-select: none;
+    transition: box-shadow var(--transition);
   }
-  .panic-btn:hover { transform: scale(1.08); box-shadow: var(--shadow-lg); }
+  .panic-btn:hover { box-shadow: var(--shadow-lg); }
+  .panic-btn.dragging { cursor: grabbing; transition: none; opacity: 0.85; }
   .panic-btn title-attr { display: none; }
 
   /* ── NAVBAR ──────────────────────────────────────────── */
@@ -353,6 +355,17 @@
   }
   .mood-emoji:hover, .mood-emoji.active {
     transform: scale(1.2); background: var(--c-warm);
+  }
+
+  /* Content sections (Home/Session/Voice/Progress/etc — one visible at a time) */
+  .content-section { animation: fadeInUp 0.2s ease; }
+  @keyframes fadeInUp { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* Empty-state placeholders — shown only when there's genuinely no data yet */
+  .empty-state {
+    font-size: 13px; color: var(--c-muted); line-height: 1.6;
+    padding: 14px; background: var(--c-bg); border-radius: 10px;
+    border: 1px dashed var(--c-border);
   }
 
   /* Dashboard grid */
@@ -661,13 +674,34 @@
     .features-grid { grid-template-columns: 1fr; }
     nav { padding: 0 16px; }
     .main-content { padding: 20px 16px; }
+    .assessment-card, .onboarding-card { padding: 20px; }
+    .onboarding-card { border-radius: 16px; }
+    .mode-switcher { flex-wrap: wrap; }
+    .mode-btn { flex: 1 1 50%; }
+    .mode-btn:nth-child(2) { border-right: none; }
+    .mode-btn:nth-child(1), .mode-btn:nth-child(2) { border-bottom: 1px solid var(--c-border); }
+    .hero h1 { font-size: 30px; }
+    .greeting h2 { font-size: 22px; }
+    .nav-actions .btn { padding: 8px 14px; font-size: 13px; }
+    .theme-picker { justify-content: center; }
+    .panic-orb { width: min(220px, 55vw); height: min(220px, 55vw); }
+    .panic-instruction { font-size: 21px; }
+    .panic-counter { font-size: 38px; }
+    .breathing-steps { gap: 10px; }
+    .breath-step { padding: 8px 14px; font-size: 13px; }
+  }
+  @media (max-width: 420px) {
+    .hero-cta .btn, .session-card .btn { width: 100%; justify-content: center; }
+    .hero-cta { flex-direction: column; }
+    .therapist-card { flex-wrap: wrap; }
+    .t-rating { margin-left: 0; }
   }
 </style>
 </head>
 <body>
 
 <!-- ── FLOATING PANIC BUTTON ──────────────────────────────── -->
-<button class="panic-btn" onclick="togglePanic()" title="Panic Mode — Breathing Exercise">🌬️</button>
+<button class="panic-btn" id="panicBtn" title="Panic Mode — Breathing Exercise · drag to move">🌬️</button>
 
 <!-- ══════════════════════════════════════════════════════════ -->
 <!-- PAGE: LANDING                                             -->
@@ -838,36 +872,35 @@
     <!-- Sidebar -->
     <div class="sidebar">
       <div class="sidebar-section">Main</div>
-      <button class="nav-item active" onclick="setActiveNav(this)">
+      <button class="nav-item active" data-section="home" onclick="showSection('home', this)">
         <span class="icon">🏠</span> Home
       </button>
-      <button class="nav-item" onclick="setActiveNav(this)">
+      <button class="nav-item" data-section="session" onclick="showSection('session', this)">
         <span class="icon">💬</span> Session
-        <span class="nav-badge">New</span>
       </button>
-      <button class="nav-item" onclick="setActiveNav(this)">
+      <button class="nav-item" data-section="voice" onclick="showSection('voice', this)">
         <span class="icon">🎙️</span> Voice Journal
       </button>
-      <button class="nav-item" onclick="setActiveNav(this)">
+      <button class="nav-item" data-section="progress" onclick="showSection('progress', this)">
         <span class="icon">📈</span> Progress
       </button>
 
       <div class="sidebar-section">Support</div>
-      <button class="nav-item" onclick="setActiveNav(this)">
+      <button class="nav-item" data-section="therapist" onclick="showSection('therapist', this)">
         <span class="icon">🗺️</span> Find Therapist
       </button>
-      <button class="nav-item" onclick="setActiveNav(this)">
+      <button class="nav-item" data-section="report" onclick="showSection('report', this)">
         <span class="icon">📄</span> My Report
       </button>
-      <button class="nav-item" onclick="setActiveNav(this)">
+      <button class="nav-item" data-section="exercises" onclick="showSection('exercises', this)">
         <span class="icon">🧘</span> Exercises
       </button>
 
       <div class="sidebar-section">You</div>
-      <button class="nav-item" onclick="setActiveNav(this)">
+      <button class="nav-item" data-section="appearance" onclick="showSection('appearance', this)">
         <span class="icon">🎨</span> Appearance
       </button>
-      <button class="nav-item" onclick="setActiveNav(this)">
+      <button class="nav-item" data-section="settings" onclick="showSection('settings', this)">
         <span class="icon">⚙️</span> Settings
       </button>
     </div>
@@ -875,241 +908,89 @@
     <!-- Main -->
     <div class="main-content">
 
-      <!-- Greeting -->
-      <div class="greeting">
-        <h2>Hey Arav, good evening 🌙</h2>
-        <p>Your last session was 2 days ago. How are you feeling today?</p>
+      <!-- ═══════════════════ HOME ═══════════════════ -->
+      <div class="content-section" id="section-home">
+
+        <div class="greeting">
+          <h2 id="greetingText">Hey there 👋</h2>
+          <p id="greetingSub">How are you feeling today?</p>
+        </div>
+
+        <div class="mood-bar">
+          <p>Today's mood</p>
+          <div class="mood-emojis" id="homeMoodEmojis">
+            <div class="mood-emoji" onclick="selectMood(this)" title="Very low">😔</div>
+            <div class="mood-emoji" onclick="selectMood(this)" title="Low">😕</div>
+            <div class="mood-emoji" onclick="selectMood(this)" title="Okay">😐</div>
+            <div class="mood-emoji" onclick="selectMood(this)" title="Good">🙂</div>
+            <div class="mood-emoji" onclick="selectMood(this)" title="Great">😊</div>
+          </div>
+          <button class="btn btn-outline" style="margin-left:auto;" onclick="logMood()">Log it →</button>
+        </div>
+
+        <div class="dash-grid">
+
+          <div class="dash-card session-card span-2">
+            <div class="card-header">
+              <div class="card-title">AI Session</div>
+              <div class="card-icon">✨</div>
+            </div>
+            <h3>Start your session</h3>
+            <p id="homeSessionSub">Talk it through, whenever you're ready — no assessment required.</p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="btn" onclick="startChatSession()">💬 Chat session</button>
+              <button class="btn" onclick="showSection('voice', document.querySelector('[data-section=voice]'))">🎙️ Voice journal</button>
+            </div>
+          </div>
+
+          <div class="dash-card">
+            <div class="card-header">
+              <div class="card-title">Diagnosis</div>
+              <div class="card-icon">🧠</div>
+            </div>
+            <div id="homeDiagnosisBody">
+              <div class="empty-state">No assessment taken yet.</div>
+              <button class="btn btn-outline" style="margin-top:10px;" onclick="showPage('onboarding')">Take assessment</button>
+            </div>
+          </div>
+
+          <div class="dash-card">
+            <div class="card-header">
+              <div class="card-title">Mood — 7 days</div>
+              <div class="card-icon">📈</div>
+            </div>
+            <div id="homeMoodChartWrap">
+              <div class="empty-state">No mood check-ins yet — log today's mood to start your chart.</div>
+            </div>
+          </div>
+
+          <div class="dash-card span-2">
+            <div class="card-header">
+              <div class="card-title">Past insights</div>
+              <div class="card-icon">💡</div>
+            </div>
+            <div id="homeInsightsList">
+              <div class="empty-state">No session insights yet — finish a session to see it here.</div>
+            </div>
+          </div>
+
+          <div class="dash-card">
+            <div class="card-header">
+              <div class="card-title">Streak</div>
+              <div class="card-icon">🔥</div>
+            </div>
+            <div id="homeStreakBody">
+              <div class="empty-state">No activity logged yet.</div>
+            </div>
+          </div>
+
+        </div>
       </div>
 
-      <!-- Mood check-in -->
-      <div class="mood-bar">
-        <p>Today's mood</p>
-        <div class="mood-emojis">
-          <div class="mood-emoji" onclick="selectMood(this)" title="Very low">😔</div>
-          <div class="mood-emoji" onclick="selectMood(this)" title="Low">😕</div>
-          <div class="mood-emoji active" onclick="selectMood(this)" title="Okay">😐</div>
-          <div class="mood-emoji" onclick="selectMood(this)" title="Good">🙂</div>
-          <div class="mood-emoji" onclick="selectMood(this)" title="Great">😊</div>
-        </div>
-        <button class="btn btn-outline" style="margin-left:auto;" onclick="showPage('dashboard')">Log it →</button>
-      </div>
-
-      <!-- Dashboard grid -->
-      <div class="dash-grid">
-
-        <!-- Session CTA -->
-        <div class="dash-card session-card span-2">
-          <div class="card-header">
-            <div class="card-title">AI Session</div>
-            <div class="card-icon">✨</div>
-          </div>
-          <h3>Start your session</h3>
-          <p>Adaptive CBT · Anxiety mode · ~30 min · Socratic Inquiry active</p>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            <button class="btn">💬 Chat session</button>
-            <button class="btn">🎙️ Voice session</button>
-          </div>
-        </div>
-
-        <!-- Diagnosis chip -->
+      <!-- ═══════════════════ SESSION ═══════════════════ -->
+      <div class="content-section" id="section-session" style="display:none;">
+        <div class="greeting"><h2>AI Session</h2><p>Pick a mode, then start talking — text or voice.</p></div>
         <div class="dash-card">
-          <div class="card-header">
-            <div class="card-title">Diagnosis</div>
-            <div class="card-icon">🧠</div>
-          </div>
-          <div style="font-size:22px;font-weight:700;margin-bottom:6px;color:var(--c-primary);">Anxiety</div>
-          <div style="font-size:13px;color:var(--c-muted);margin-bottom:16px;">Severity: 6 / 10 · Assessed Aug 4</div>
-          <div style="background:var(--c-bg);border-radius:8px;padding:10px;font-size:12px;color:var(--c-muted);">
-            Top trigger: <strong style="color:var(--c-text);">Exam pressure + social overthinking</strong>
-          </div>
-        </div>
-
-        <!-- Mood trend -->
-        <div class="dash-card">
-          <div class="card-header">
-            <div class="card-title">Mood — 7 days</div>
-            <div class="card-icon">📈</div>
-          </div>
-          <div class="mood-chart">
-            <div class="mood-bar-item" style="height:40%"></div>
-            <div class="mood-bar-item" style="height:55%"></div>
-            <div class="mood-bar-item" style="height:35%"></div>
-            <div class="mood-bar-item" style="height:70%"></div>
-            <div class="mood-bar-item" style="height:50%"></div>
-            <div class="mood-bar-item" style="height:65%"></div>
-            <div class="mood-bar-item today" style="height:60%"></div>
-          </div>
-          <div class="chart-labels">
-            <div class="chart-label">M</div><div class="chart-label">T</div>
-            <div class="chart-label">W</div><div class="chart-label">T</div>
-            <div class="chart-label">F</div><div class="chart-label">S</div>
-            <div class="chart-label" style="color:var(--c-accent);font-weight:600;">T</div>
-          </div>
-        </div>
-
-        <!-- Voice journal + SER -->
-        <div class="dash-card">
-          <div class="card-header">
-            <div class="card-title">Voice Journal</div>
-            <div class="card-icon">🎙️</div>
-          </div>
-          <div class="voice-recorder">
-            <button class="mic-btn" id="micBtn" onclick="toggleRecording(this)">🎙️</button>
-            <div class="voice-waveform" id="waveform" style="opacity:0">
-              <div class="wave-bar"></div><div class="wave-bar"></div>
-              <div class="wave-bar"></div><div class="wave-bar"></div>
-              <div class="wave-bar"></div><div class="wave-bar"></div>
-              <div class="wave-bar"></div>
-            </div>
-            <div class="voice-status" id="voiceStatus">Tap to start — no word limit</div>
-          </div>
-          <div class="ser-indicator" style="margin-top:12px;">
-            <div style="font-size:18px;">📊</div>
-            <div class="ser-bar-wrap">
-              <div class="ser-label">Emotion reading</div>
-              <div style="display:flex;flex-direction:column;gap:5px;">
-                <div>
-                  <div class="ser-label">Calm</div>
-                  <div class="ser-bar"><div class="ser-fill ser-calm"></div></div>
-                </div>
-                <div>
-                  <div class="ser-label">Anxious</div>
-                  <div class="ser-bar"><div class="ser-fill ser-anxiety"></div></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Session insights chart -->
-        <div class="dash-card span-2">
-          <div class="card-header">
-            <div class="card-title">Past insights</div>
-            <div class="card-icon">💡</div>
-          </div>
-          <div class="insight-item">
-            <div class="date">Aug 2, 2026 · Session #4</div>
-            <div class="text">"My fear of failure is really about what others will think of me — not the failure itself."</div>
-            <span class="condition-chip chip-anxiety">Anxiety</span>
-          </div>
-          <div class="insight-item">
-            <div class="date">Jul 29, 2026 · Session #3</div>
-            <div class="text">"I can't control the outcome, only what I do today. That's actually enough."</div>
-            <span class="condition-chip chip-stress">Stress</span>
-          </div>
-          <div class="insight-item">
-            <div class="date">Jul 24, 2026 · Session #2</div>
-            <div class="text">"The spiral starts when I stop and let the thoughts have space. Movement helps — even just a walk."</div>
-            <span class="condition-chip chip-anxiety">Anxiety</span>
-          </div>
-        </div>
-
-        <!-- Therapist finder -->
-        <div class="dash-card span-2">
-          <div class="card-header">
-            <div class="card-title">Recommended Therapists</div>
-            <div class="card-icon">🗺️</div>
-          </div>
-          <div class="therapist-card">
-            <div class="t-avatar">👩‍⚕️</div>
-            <div class="t-info">
-              <h4>Dr. Priya Sharma</h4>
-              <p>Clinical Psychologist · Kanpur · ₹800/session</p>
-              <div class="t-tags">
-                <span class="t-tag">Anxiety</span>
-                <span class="t-tag">CBT</span>
-                <span class="t-tag">Young adults</span>
-              </div>
-            </div>
-            <div class="t-rating">⭐ 4.9</div>
-          </div>
-          <div class="therapist-card">
-            <div class="t-avatar">👨‍⚕️</div>
-            <div class="t-info">
-              <h4>Dr. Rohit Agarwal</h4>
-              <p>Psychiatrist · Kanpur · ₹1,200/session</p>
-              <div class="t-tags">
-                <span class="t-tag">ADHD</span>
-                <span class="t-tag">Anxiety</span>
-                <span class="t-tag">Online available</span>
-              </div>
-            </div>
-            <div class="t-rating">⭐ 4.7</div>
-          </div>
-          <div class="map-placeholder">
-            <div class="map-icon">📍</div>
-            <div>OpenStreetMap · Nearest clinics pinned</div>
-          </div>
-        </div>
-
-        <!-- PDF Report -->
-        <div class="dash-card">
-          <div class="card-header">
-            <div class="card-title">Clinical Report</div>
-            <div class="card-icon">📄</div>
-          </div>
-          <div class="export-preview">
-            Patient: Arav M.<br>
-            Condition: Anxiety (6/10)<br>
-            Sessions: 4<br>
-            Top trigger: Exam pressure<br>
-            Mood trend: Improving ↑<br>
-            Key insight: Fear of judgement<br>
-            ─────────────────────<br>
-            <em>Auto-generated · No raw chat exposed</em>
-          </div>
-          <button class="btn btn-outline" style="width:100%;justify-content:center;margin-top:14px;" onclick="alert('PDF generated! Share with your therapist.')">
-            📥 Download PDF Report
-          </button>
-        </div>
-
-        <!-- ─── STREAK + HABIT TRACKER ────────────────────── -->
-        <div class="dash-card">
-          <div class="card-header">
-            <div class="card-title">Streak &amp; Habits</div>
-            <div class="card-icon">🔥</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
-            <div class="streak-flame">🔥</div>
-            <div>
-              <div class="streak-count" id="streakCount">6</div>
-              <div class="streak-label">day streak — keep it going</div>
-            </div>
-          </div>
-          <div class="streak-row" id="streakRow">
-            <div class="streak-day done" title="Mon">M</div>
-            <div class="streak-day done" title="Tue">T</div>
-            <div class="streak-day done" title="Wed">W</div>
-            <div class="streak-day done" title="Thu">T</div>
-            <div class="streak-day done" title="Fri">F</div>
-            <div class="streak-day done" title="Sat">S</div>
-            <div class="streak-day today" title="Today">T</div>
-          </div>
-          <div class="habit-row">
-            <div class="habit-item checked" id="h1" onclick="toggleHabit(this)">
-              <div class="habit-check">✓</div>
-              <div class="habit-name">Morning check-in</div>
-              <div class="habit-muted">Done today</div>
-            </div>
-            <div class="habit-item" id="h2" onclick="toggleHabit(this)">
-              <div class="habit-check"></div>
-              <div class="habit-name">Voice journal</div>
-              <div class="habit-muted">Not yet</div>
-            </div>
-            <div class="habit-item" id="h3" onclick="toggleHabit(this)">
-              <div class="habit-check"></div>
-              <div class="habit-name">Breathing exercise</div>
-              <div class="habit-muted">Not yet</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ─── SESSION MODE SWITCHER ──────────────────────── -->
-        <div class="dash-card span-2">
-          <div class="card-header">
-            <div class="card-title">AI Session Mode</div>
-            <div class="card-icon">🧠</div>
-          </div>
           <div class="mode-switcher" id="modeSwitcher">
             <button class="mode-btn active" onclick="switchMode(this,'empathic')" data-mode="empathic">
               <span class="mode-icon">🤝</span>Empathic<br>Listener
@@ -1125,8 +1006,8 @@
             </button>
           </div>
           <div class="mode-description" id="modeDesc">
-            <strong>Empathic Listener</strong> — The AI listens and validates without jumping to advice. 
-            It reflects back what you're saying, names the feeling, and gives you space to keep going. 
+            <strong>Empathic Listener</strong> — The AI listens and validates without jumping to advice.
+            It reflects back what you're saying, names the feeling, and gives you space to keep going.
             Use this when you need to vent first and think later.
           </div>
           <div class="mode-badge-row" id="modeTags">
@@ -1137,32 +1018,193 @@
             <span class="mode-tag">Reframing</span>
             <span class="mode-tag">Exercises</span>
           </div>
-          <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="alert('Starting session in Empathic Listener mode…')">
-            Start session in this mode →
-          </button>
-        </div>
-
-        <!-- Crisis banner (hidden by default, shown when triggered) -->
-        <div class="dash-card span-3">
-          <div class="card-header">
-            <div class="card-title">Safety Layer</div>
-            <div class="card-icon">🚨</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-primary" style="flex:1;justify-content:center;min-width:160px;" onclick="startChatSession()">
+              💬 Start chat session →
+            </button>
+            <button class="btn btn-outline" style="flex:1;justify-content:center;min-width:160px;" onclick="startVoiceSession()">
+              🎙️ Start voice session →
+            </button>
           </div>
-          <p style="font-size:13px;color:var(--c-muted);margin-bottom:14px;">
-            Crisis guardrails are active. If distress or self-harm language is detected in any session, the chat pauses and the following appears immediately:
-          </p>
-          <div class="crisis-banner show">
-            <h4>🚨 We noticed something</h4>
-            <p>It sounds like you might be going through something serious. You don't have to face this alone — trained support is one call away.</p>
-            <div class="crisis-numbers">
-              <button class="crisis-num">📞 Tele-MANAS: 14416</button>
-              <button class="crisis-num">iCall: 9152987821</button>
-              <button class="crisis-num" style="background:var(--c-text);">✉️ Alert emergency contact</button>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ VOICE JOURNAL ═══════════════════ -->
+      <div class="content-section" id="section-voice" style="display:none;">
+        <div class="greeting"><h2>Voice Journal</h2><p>Talk freely — speech-to-text and emotion analysis, no word limit.</p></div>
+        <div class="dash-card">
+          <div class="voice-recorder">
+            <button class="mic-btn" id="micBtn" onclick="toggleRecording(this)">🎙️</button>
+            <div class="voice-waveform" id="waveform" style="opacity:0">
+              <div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div>
+            </div>
+            <div class="voice-status" id="voiceStatus">Tap to start — no word limit</div>
+          </div>
+          <div class="ser-indicator" id="serIndicator" style="margin-top:12px;display:none;">
+            <div style="font-size:18px;">📊</div>
+            <div class="ser-bar-wrap">
+              <div class="ser-label">Emotion reading</div>
+              <div style="display:flex;flex-direction:column;gap:5px;">
+                <div>
+                  <div class="ser-label">Calm</div>
+                  <div class="ser-bar"><div class="ser-fill ser-calm" style="width:0%"></div></div>
+                </div>
+                <div>
+                  <div class="ser-label">Anxious</div>
+                  <div class="ser-bar"><div class="ser-fill ser-anxiety" style="width:0%"></div></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+        <div class="dash-card" style="margin-top:16px;">
+          <div class="card-header">
+            <div class="card-title">Past voice journals</div>
+            <div class="card-icon">🗒️</div>
+          </div>
+          <div id="voiceHistoryList"><div class="empty-state">No voice journals recorded yet.</div></div>
+        </div>
+      </div>
 
-      </div><!-- /dash-grid -->
+      <!-- ═══════════════════ PROGRESS ═══════════════════ -->
+      <div class="content-section" id="section-progress" style="display:none;">
+        <div class="greeting"><h2>Progress</h2><p>Your real mood trend, insights, and activity — nothing here until you log it.</p></div>
+        <div class="dash-grid">
+          <div class="dash-card span-2">
+            <div class="card-header">
+              <div class="card-title">Mood — 7 days</div>
+              <div class="card-icon">📈</div>
+            </div>
+            <div id="progressMoodChartWrap"><div class="empty-state">No mood check-ins yet.</div></div>
+          </div>
+          <div class="dash-card">
+            <div class="card-header">
+              <div class="card-title">Streak &amp; Habits</div>
+              <div class="card-icon">🔥</div>
+            </div>
+            <div id="progressStreakBody"><div class="empty-state">No activity logged yet.</div></div>
+          </div>
+          <div class="dash-card span-3">
+            <div class="card-header">
+              <div class="card-title">Past insights</div>
+              <div class="card-icon">💡</div>
+            </div>
+            <div id="progressInsightsList"><div class="empty-state">No session insights yet.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ FIND THERAPIST ═══════════════════ -->
+      <div class="content-section" id="section-therapist" style="display:none;">
+        <div class="greeting"><h2>Find Therapist</h2><p>Matched to your diagnosis, filtered by rating.</p></div>
+        <div class="dash-card">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+            <input id="therapistCityInput" placeholder="Your city (e.g. Kanpur)" value="Kanpur"
+                   style="flex:1;min-width:180px;padding:11px 14px;border-radius:10px;border:1.5px solid var(--c-border);
+                          font-family:var(--font-body);font-size:14px;background:var(--c-bg);color:var(--c-text);outline:none;">
+            <button class="btn btn-primary" onclick="findTherapists()">🔍 Search</button>
+          </div>
+          <div id="therapistResultsList"><div class="empty-state">Search to see matched therapists here.</div></div>
+          <div class="map-placeholder">
+            <div class="map-icon">📍</div>
+            <div>OpenStreetMap · Nearest clinics pinned</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ MY REPORT ═══════════════════ -->
+      <div class="content-section" id="section-report" style="display:none;">
+        <div class="greeting"><h2>My Report</h2><p>Clinical summary PDF for your real therapist — no raw chat included.</p></div>
+        <div class="dash-card">
+          <p style="font-size:13px;color:var(--c-muted);margin-bottom:16px;">
+            Generates from your actual diagnosis, mood history, and session insights.
+            Requires at least one completed assessment.
+          </p>
+          <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="generateReport()">
+            📥 Generate &amp; download PDF report
+          </button>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ EXERCISES ═══════════════════ -->
+      <div class="content-section" id="section-exercises" style="display:none;">
+        <div class="greeting"><h2>Exercises</h2><p>Log a completed exercise — each one is saved to your real history.</p></div>
+        <div class="dash-card">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-outline" onclick="logExercise('breathing')">🌬️ Breathing</button>
+            <button class="btn btn-outline" onclick="logExercise('grounding')">🌿 Grounding</button>
+            <button class="btn btn-outline" onclick="logExercise('thought_journal')">📝 Thought journal</button>
+            <button class="btn btn-outline" onclick="logExercise('focus_timer')">⏱️ Focus timer</button>
+          </div>
+        </div>
+        <div class="dash-card" style="margin-top:16px;">
+          <div class="card-header">
+            <div class="card-title">History</div>
+            <div class="card-icon">🧘</div>
+          </div>
+          <div id="exerciseHistoryList"><div class="empty-state">No exercises logged yet.</div></div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ APPEARANCE ═══════════════════ -->
+      <div class="content-section" id="section-appearance" style="display:none;">
+        <div class="greeting"><h2>Appearance</h2><p>Pick the colour that feels most calm to you.</p></div>
+        <div class="dash-card">
+          <div class="theme-picker" id="dashThemePicker" style="justify-content:flex-start;">
+            <div class="theme-swatch swatch-teal" data-label="Teal" onclick="pickTheme(this, '')"></div>
+            <div class="theme-swatch swatch-pink" data-label="Rose" onclick="pickTheme(this, 'pink')"></div>
+            <div class="theme-swatch swatch-sage" data-label="Sage" onclick="pickTheme(this, 'sage')"></div>
+            <div class="theme-swatch swatch-sky"  data-label="Sky"  onclick="pickTheme(this, 'sky')"></div>
+            <div class="theme-swatch swatch-sand" data-label="Sand" onclick="pickTheme(this, 'sand')"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ SETTINGS ═══════════════════ -->
+      <div class="content-section" id="section-settings" style="display:none;">
+        <div class="greeting"><h2>Settings</h2><p>Your account and safety settings.</p></div>
+
+        <div class="dash-card">
+          <div class="card-header"><div class="card-title">Account</div><div class="card-icon">👤</div></div>
+          <div id="settingsAccountBody" style="font-size:13px;color:var(--c-muted);">Loading…</div>
+          <button class="btn btn-outline" style="margin-top:14px;" onclick="signOut()">Sign out</button>
+        </div>
+
+        <div class="dash-card" style="margin-top:16px;">
+          <div class="card-header"><div class="card-title">Emergency Contact</div><div class="card-icon">🚨</div></div>
+          <p style="font-size:12px;color:var(--c-muted);margin-bottom:12px;">
+            Used only if you tap "Alert emergency contact" during a crisis. Saved on this device only.
+          </p>
+          <input id="settingsContactName" placeholder="Contact name"
+                 style="display:block;width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid var(--c-border);font-family:var(--font-body);font-size:14px;margin-bottom:10px;background:var(--c-bg);color:var(--c-text);outline:none;">
+          <input id="settingsContactPhone" placeholder="Phone (with country code)"
+                 style="display:block;width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid var(--c-border);font-family:var(--font-body);font-size:14px;margin-bottom:10px;background:var(--c-bg);color:var(--c-text);outline:none;">
+          <input id="settingsContactEmail" type="email" placeholder="Email"
+                 style="display:block;width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid var(--c-border);font-family:var(--font-body);font-size:14px;margin-bottom:10px;background:var(--c-bg);color:var(--c-text);outline:none;">
+          <button class="btn btn-primary" style="margin-top:8px;" onclick="saveEmergencyContact()">Save contact</button>
+        </div>
+
+        <!-- Crisis banner — hidden unless a real crisis is detected during a session -->
+        <div class="dash-card" style="margin-top:16px;">
+          <div class="card-header"><div class="card-title">Safety Layer</div><div class="card-icon">🚨</div></div>
+          <p style="font-size:13px;color:var(--c-muted);">
+            Crisis guardrails run on every message. If self-harm language is detected, the chat pauses immediately and Tele-MANAS (14416) is surfaced.
+          </p>
+          <div class="crisis-banner" id="settingsCrisisBanner">
+            <h4>🚨 We noticed something</h4>
+            <p>It sounds like you might be going through something serious. You don't have to face this alone — trained support is one call away.</p>
+            <div class="crisis-numbers">
+              <button class="crisis-num" onclick="window.location.href='tel:14416'">📞 Tele-MANAS: 14416</button>
+              <button class="crisis-num" onclick="window.location.href='tel:9152987821'">iCall: 9152987821</button>
+              <button class="crisis-num" style="background:var(--c-text);" onclick="sendCrisisAlert()">✉️ Alert emergency contact</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div><!-- /main-content -->
   </div><!-- /dashboard-layout -->
 </div>
@@ -1177,7 +1219,6 @@
   <div class="panic-sub">Follow the orb. You're safe. Take your time.</div>
   <div class="breathing-steps">
     <div class="breath-step active-breath" id="bs-in">Breathe in · 4s</div>
-    <div class="breath-step" id="bs-hold">Hold · 4s</div>
     <div class="breath-step" id="bs-out">Breathe out · 4s</div>
   </div>
   <button class="btn btn-ghost" style="margin-top:8px;" onclick="togglePanic()">← I'm okay, go back</button>
@@ -1198,15 +1239,17 @@ const SUPABASE_ANON  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmF
 let STATE = {
   jwt:          null,    // Supabase access token
   user:         null,    // { id, email }
+  userName:     null,
   diagnosisId:  null,
-  condition:    'anxiety',
+  condition:    null,    // no fake default — null until a real diagnosis exists
   sessionId:    null,
   sessionMode:  'empathic',
   chatHistory:  [],      // [{role, parts:[text]}]
   moodBefore:   null,
   mediaRecorder: null,
   audioChunks:  [],
-  streakCount:  0,
+  recordMimeType: null,
+  voiceChatMode: false,  // true while a "voice session" chat is active
 };
 
 // Persist JWT across refresh
@@ -1303,58 +1346,245 @@ function showPage(name) {
 }
 
 // ════════════════════════════════════════════════════════
+// SECTION ROUTING (Home / Session / Voice / Progress / etc)
+// ════════════════════════════════════════════════════════
+function showSection(name, navEl) {
+  document.querySelectorAll('.content-section').forEach(s => { s.style.display = 'none'; });
+  const el = document.getElementById('section-' + name);
+  if (el) el.style.display = 'block';
+  if (navEl) setActiveNav(navEl);
+
+  if (name === 'voice')     loadExerciseHistory('voice_journal', 'voiceHistoryList', renderVoiceHistory);
+  if (name === 'exercises') loadExerciseHistory(null, 'exerciseHistoryList', renderExerciseHistory);
+  if (name === 'settings')  { loadSettingsAccount(); loadEmergencyContact(); }
+}
+
+// ════════════════════════════════════════════════════════
 // DASHBOARD INIT  — called every time dashboard shows
 // ════════════════════════════════════════════════════════
 async function initDashboard() {
   if (!STATE.jwt) return;
   try {
-    // Load latest diagnosis
-    const { diagnosis } = await api('GET', '/api/v1/diagnosis/latest');
-    if (diagnosis) {
-      STATE.diagnosisId = diagnosis.id;
-      STATE.condition   = diagnosis.condition;
-      document.getElementById('diagCondition') && (
-        document.getElementById('diagCondition').textContent = diagnosis.condition.charAt(0).toUpperCase() + diagnosis.condition.slice(1)
-      );
-    }
-    // Load mood history → update chart
-    const { mood_history } = await api('GET', '/api/v1/mood/history?days=7');
-    renderMoodChart(mood_history || []);
+    const profile = await api('GET', '/api/v1/profile');
+    STATE.userName = profile.name || 'there';
+    const tc = getLocalTimeContext();
+    const g1 = document.getElementById('greetingText');
+    const g2 = document.getElementById('greetingSub');
+    if (g1) g1.textContent = `Hey ${STATE.userName}, good ${tc.timeOfDay.toLowerCase()} ${tc.emoji}`;
+    if (g2) g2.textContent = 'How are you feeling today?';
+  } catch (e) { console.warn('Profile load:', e.message); }
 
-    // Load session history → insights
-    const { sessions } = await api('GET', '/api/v1/session/history?limit=5');
-    renderInsights(sessions || []);
+  let diagnosis = null, moodHistory = [], sessions = [], exercises = [];
+  try {
+    ({ diagnosis } = await api('GET', '/api/v1/diagnosis/latest'));
+    if (diagnosis) { STATE.diagnosisId = diagnosis.id; STATE.condition = diagnosis.condition; }
+  } catch (e) { console.warn('Diagnosis load:', e.message); }
+  try { ({ mood_history: moodHistory } = await api('GET', '/api/v1/mood/history?days=7')); } catch (e) {}
+  try { ({ sessions } = await api('GET', '/api/v1/session/history?limit=10')); } catch (e) {}
+  try { ({ exercise_history: exercises } = await api('GET', '/api/v1/exercise/history?days=30')); } catch (e) {}
 
-  } catch (e) { console.warn('Dashboard init:', e.message); }
+  renderDiagnosis(diagnosis);
+  renderMoodChart(moodHistory || [], ['homeMoodChartWrap', 'progressMoodChartWrap']);
+  renderInsights(sessions || [], ['homeInsightsList', 'progressInsightsList']);
+  renderStreak(moodHistory || [], sessions || [], exercises || [], ['homeStreakBody', 'progressStreakBody']);
 }
 
-function renderMoodChart(history) {
-  const bars = document.querySelectorAll('.mood-bar-item');
-  if (!bars.length) return;
-  // Fill last 7 days; if fewer entries, leave defaults
+function getLocalTimeContext() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12)  return { timeOfDay: 'Morning',   emoji: '☀️' };
+  if (h >= 12 && h < 17) return { timeOfDay: 'Afternoon', emoji: '🌤️' };
+  if (h >= 17 && h < 22) return { timeOfDay: 'Evening',   emoji: '🌙' };
+  return { timeOfDay: 'Night', emoji: '🌌' };
+}
+
+function renderDiagnosis(diagnosis) {
+  const el = document.getElementById('homeDiagnosisBody');
+  if (!el) return;
+  if (!diagnosis) {
+    el.innerHTML = `
+      <div class="empty-state">No assessment taken yet.</div>
+      <button class="btn btn-outline" style="margin-top:10px;" onclick="showPage('onboarding')">Take assessment</button>`;
+    return;
+  }
+  const cond = diagnosis.condition.charAt(0).toUpperCase() + diagnosis.condition.slice(1);
+  const date = (diagnosis.created_at || '').slice(0, 10);
+  el.innerHTML = `
+    <div style="font-size:22px;font-weight:700;margin-bottom:6px;color:var(--c-primary);">${cond}</div>
+    <div style="font-size:13px;color:var(--c-muted);">Severity: ${diagnosis.severity_score} / 10 · Assessed ${date}</div>`;
+}
+
+function renderMoodChart(history, targetIds) {
   const recent = history.slice(-7);
-  recent.forEach((entry, i) => {
-    if (bars[i]) bars[i].style.height = `${(entry.score / 5) * 100}%`;
+  const labels = recent.map(entry => {
+    const d = new Date(entry.logged_at);
+    return d.toLocaleDateString('en-US', { weekday: 'short' })[0];
+  });
+  const html = !recent.length
+    ? `<div class="empty-state">No mood check-ins yet — log today's mood to start your chart.</div>`
+    : `
+      <div class="mood-chart">
+        ${recent.map((entry, i) => `<div class="mood-bar-item${i === recent.length - 1 ? ' today' : ''}" style="height:${(entry.score / 5) * 100}%" title="${entry.score}/5"></div>`).join('')}
+      </div>
+      <div class="chart-labels">
+        ${labels.map((l, i) => `<div class="chart-label"${i === labels.length - 1 ? ' style="color:var(--c-accent);font-weight:600;"' : ''}>${l}</div>`).join('')}
+      </div>`;
+  (targetIds || []).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
   });
 }
 
-function renderInsights(sessions) {
-  const list = document.querySelector('.insight-item')?.parentElement;
-  if (!list || !sessions.length) return;
-  // Remove placeholder items
-  list.querySelectorAll('.insight-item').forEach(el => el.remove());
-  sessions.forEach(s => {
-    if (!s.insight) return;
-    const cond = s.diagnoses?.condition || STATE.condition;
-    const chipClass = { anxiety: 'chip-anxiety', adhd: 'chip-adhd', stress: 'chip-stress' }[cond] || 'chip-stress';
-    const div = document.createElement('div');
-    div.className = 'insight-item';
-    div.innerHTML = `
-      <div class="date">${s.created_at?.slice(0,10)} · Session</div>
-      <div class="text">"${s.insight}"</div>
-      <span class="condition-chip ${chipClass}">${cond}</span>`;
-    list.appendChild(div);
+function renderInsights(sessions, targetIds) {
+  const withInsight = sessions.filter(s => s.insight);
+  const html = !withInsight.length
+    ? `<div class="empty-state">No session insights yet — finish a session to see it here.</div>`
+    : withInsight.map(s => {
+        const cond = s.diagnoses?.condition || STATE.condition || 'stress';
+        const chipClass = { anxiety: 'chip-anxiety', adhd: 'chip-adhd', stress: 'chip-stress' }[cond] || 'chip-stress';
+        return `
+          <div class="insight-item">
+            <div class="date">${(s.created_at || '').slice(0, 10)} · Session</div>
+            <div class="text">"${s.insight}"</div>
+            <span class="condition-chip ${chipClass}">${cond}</span>
+          </div>`;
+      }).join('');
+  (targetIds || []).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
   });
+}
+
+// Real streak: consecutive days (ending today) with at least one mood log,
+// session, or exercise. No fabricated "6-day streak" — computed from
+// whatever activity actually happened.
+function computeStreakDays(moodHistory, sessions, exercises) {
+  const activeDates = new Set();
+  moodHistory.forEach(m => activeDates.add(m.logged_at?.slice(0, 10)));
+  sessions.forEach(s => activeDates.add((s.ended_at || s.created_at || '').slice(0, 10)));
+  exercises.forEach(e => activeDates.add(e.completed_at?.slice(0, 10)));
+
+  let streak = 0;
+  const cursor = new Date();
+  while (true) {
+    const key = cursor.toISOString().slice(0, 10);
+    if (activeDates.has(key)) { streak++; cursor.setDate(cursor.getDate() - 1); }
+    else break;
+  }
+  return { streak, activeDates };
+}
+
+function renderStreak(moodHistory, sessions, exercises, targetIds) {
+  const { streak, activeDates } = computeStreakDays(moodHistory, sessions, exercises);
+  const days = [];
+  const cursor = new Date();
+  cursor.setDate(cursor.getDate() - 6);
+  for (let i = 0; i < 7; i++) {
+    const key = cursor.toISOString().slice(0, 10);
+    const isToday = i === 6;
+    days.push({
+      label: cursor.toLocaleDateString('en-US', { weekday: 'short' })[0],
+      done: activeDates.has(key),
+      isToday,
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  const html = streak === 0
+    ? `<div class="empty-state">No activity logged yet — log a mood, session, or exercise to start a streak.</div>`
+    : `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <div class="streak-flame">🔥</div>
+        <div>
+          <div class="streak-count">${streak}</div>
+          <div class="streak-label">day streak — keep it going</div>
+        </div>
+      </div>
+      <div class="streak-row">
+        ${days.map(d => `<div class="streak-day${d.done ? ' done' : ''}${d.isToday ? ' today' : ''}" title="${d.label}">${d.label}</div>`).join('')}
+      </div>`;
+  (targetIds || []).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  });
+}
+
+// ════════════════════════════════════════════════════════
+// EXERCISES (real history, real logging)
+// ════════════════════════════════════════════════════════
+async function loadExerciseHistory(filterType, targetId, renderFn) {
+  const el = document.getElementById(targetId);
+  if (!el || !STATE.jwt) return;
+  try {
+    const { exercise_history } = await api('GET', '/api/v1/exercise/history?days=90');
+    const list = filterType ? (exercise_history || []).filter(e => e.type === filterType) : (exercise_history || []);
+    renderFn(list, el);
+  } catch (e) {
+    el.innerHTML = `<div class="empty-state">Couldn't load history: ${e.message}</div>`;
+  }
+}
+
+function renderExerciseHistory(list, el) {
+  if (!list.length) { el.innerHTML = `<div class="empty-state">No exercises logged yet.</div>`; return; }
+  const labels = { breathing: '🌬️ Breathing', grounding: '🌿 Grounding', thought_journal: '📝 Thought journal', focus_timer: '⏱️ Focus timer', voice_journal: '🎙️ Voice journal' };
+  el.innerHTML = list.map(e => `
+    <div class="insight-item">
+      <div class="date">${(e.completed_at || '').slice(0, 16).replace('T', ' ')}</div>
+      <div class="text">${labels[e.type] || e.type}${e.duration_secs ? ` · ${e.duration_secs}s` : ''}</div>
+    </div>`).join('');
+}
+
+function renderVoiceHistory(list, el) {
+  if (!list.length) { el.innerHTML = `<div class="empty-state">No voice journals recorded yet.</div>`; return; }
+  el.innerHTML = list.map(e => `
+    <div class="insight-item">
+      <div class="date">${(e.completed_at || '').slice(0, 16).replace('T', ' ')}</div>
+      <div class="text">🎙️ Voice journal · ${e.duration_secs || 0}s</div>
+    </div>`).join('');
+}
+
+async function logExercise(type) {
+  if (!STATE.jwt) { showAuthModal('signin'); return; }
+  try {
+    await api('POST', '/api/v1/exercise', { type, duration_secs: 0 });
+    toast('Logged ✓');
+    loadExerciseHistory(null, 'exerciseHistoryList', renderExerciseHistory);
+  } catch (e) { toast('Could not log: ' + e.message, 'error'); }
+}
+
+// ════════════════════════════════════════════════════════
+// SETTINGS
+// ════════════════════════════════════════════════════════
+async function loadSettingsAccount() {
+  const el = document.getElementById('settingsAccountBody');
+  if (!el || !STATE.jwt) return;
+  try {
+    const profile = await api('GET', '/api/v1/profile');
+    el.innerHTML = `
+      <div><strong style="color:var(--c-text);">${profile.name}</strong></div>
+      <div>${profile.email}</div>
+      <div>Member since ${(profile.created_at || '').slice(0, 10)}</div>`;
+  } catch (e) {
+    el.textContent = `Couldn't load account: ${e.message}`;
+  }
+}
+
+function saveEmergencyContact() {
+  const contact = {
+    name:  document.getElementById('settingsContactName')?.value.trim()  || '',
+    phone: document.getElementById('settingsContactPhone')?.value.trim() || '',
+    email: document.getElementById('settingsContactEmail')?.value.trim() || '',
+  };
+  localStorage.setItem('me_emergency_contact', JSON.stringify(contact));
+  toast('Emergency contact saved ✓');
+}
+
+function loadEmergencyContact() {
+  try {
+    const c = JSON.parse(localStorage.getItem('me_emergency_contact') || 'null');
+    if (!c) return;
+    if (document.getElementById('settingsContactName'))  document.getElementById('settingsContactName').value  = c.name  || '';
+    if (document.getElementById('settingsContactPhone')) document.getElementById('settingsContactPhone').value = c.phone || '';
+    if (document.getElementById('settingsContactEmail')) document.getElementById('settingsContactEmail').value = c.email || '';
+  } catch (e) {}
 }
 
 // ════════════════════════════════════════════════════════
@@ -1572,11 +1802,13 @@ function selectMood(el) {
 }
 
 async function logMood() {
-  if (!STATE.jwt || !STATE.moodBefore) return;
+  if (!STATE.jwt) { showAuthModal('signin'); return; }
+  if (!STATE.moodBefore) { toast('Pick a mood first', 'error'); return; }
   try {
     await api('POST', '/api/v1/mood', { score: STATE.moodBefore, note: '' });
     toast('Mood logged ✓');
-  } catch (e) { toast('Could not log mood — try again', 'error'); }
+    initDashboard(); // refresh chart + streak with the real new entry
+  } catch (e) { toast('Could not log mood: ' + e.message, 'error'); }
 }
 
 // ════════════════════════════════════════════════════════
@@ -1584,12 +1816,12 @@ async function logMood() {
 // ════════════════════════════════════════════════════════
 async function startChatSession() {
   if (!STATE.jwt) { showAuthModal('signin'); return; }
-  if (!STATE.diagnosisId) { toast('Complete the assessment first', 'error'); return; }
+  // Assessment is optional — sessions can start without a diagnosis on file.
 
   openChatOverlay();
   try {
     const data = await api('POST', '/api/v1/session/start', {
-      diagnosis_id: STATE.diagnosisId,
+      diagnosis_id: STATE.diagnosisId || null,
       mode: STATE.sessionMode,
     });
     STATE.sessionId   = data.session_id;
@@ -1597,7 +1829,7 @@ async function startChatSession() {
     appendChatBubble('ai', data.opening_message);
     STATE.chatHistory.push({ role: 'model', parts: [data.opening_message] });
   } catch (e) {
-    appendChatBubble('ai', 'Something went wrong starting the session. Please try again.');
+    appendChatBubble('ai', `Couldn't start the session: ${e.message}. Try again in a moment.`);
   }
 }
 
@@ -1660,12 +1892,15 @@ async function sendChatMessage() {
 
 async function endChatSession() {
   if (!STATE.sessionId) return;
-  const moodAfter = parseInt(prompt('How are you feeling now? (1 = very low, 5 = great)') || '3');
+  // Only include mood_after if the user actually answers — never fabricate it.
+  const raw = prompt('How are you feeling now? (1 = very low, 5 = great) — leave blank to skip');
+  const parsed = raw === null || raw.trim() === '' ? null : parseInt(raw);
+  const moodAfter = (parsed !== null && !isNaN(parsed)) ? Math.min(5, Math.max(1, parsed)) : null;
   try {
     const data = await api('POST', '/api/v1/session/end', {
       session_id:   STATE.sessionId,
-      mood_before:  STATE.moodBefore || 3,
-      mood_after:   Math.min(5, Math.max(1, moodAfter)),
+      mood_before:  STATE.moodBefore ?? null,  // null if the user never logged a mood — not faked
+      mood_after:   moodAfter,
       history:      STATE.chatHistory,
     });
     closeChatOverlay();
@@ -1703,9 +1938,11 @@ function openChatOverlay() {
       <div id="chatMessages" style="flex:1;overflow-y:auto;padding:24px 20px;
            display:flex;flex-direction:column;gap:12px;max-width:700px;
            width:100%;margin:0 auto;"></div>
+      <div id="chatVoiceStatus" style="text-align:center;font-size:12px;color:var(--c-muted);display:none;padding-bottom:4px;"></div>
       <div style="padding:16px 20px;background:var(--c-surface);
                   border-top:1px solid var(--c-border);max-width:700px;
                   width:100%;margin:0 auto;display:flex;gap:10px;">
+        <button id="chatMicBtn" onclick="toggleChatRecording(this)" class="btn btn-outline" title="Record a voice message" style="padding:12px 14px;">🎙️</button>
         <input id="chatInput" placeholder="Type or speak…"
                onkeydown="if(event.key==='Enter')sendChatMessage()"
                style="flex:1;padding:12px 16px;border-radius:var(--r-pill);
@@ -1795,17 +2032,36 @@ function showInsightCard(insight, moodDelta) {
 // ════════════════════════════════════════════════════════
 // VOICE JOURNAL  (real MediaRecorder → /voice/transcribe)
 // ════════════════════════════════════════════════════════
+// Pick a mimeType the browser's MediaRecorder actually supports — hardcoding
+// audio/webm broke silently in browsers that don't record webm (e.g. Safari).
+function pickRecorderMimeType() {
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+  for (const type of candidates) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
+  }
+  return ''; // let the browser pick its own default
+}
+
 async function toggleRecording(btn) {
   const waveform = document.getElementById('waveform');
   const status   = document.getElementById('voiceStatus');
+
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    status.textContent = "Voice recording isn't supported in this browser.";
+    return;
+  }
 
   if (!STATE.mediaRecorder || STATE.mediaRecorder.state === 'inactive') {
     // Start recording
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      STATE.audioChunks  = [];
-      STATE.mediaRecorder = new MediaRecorder(stream);
-      STATE.mediaRecorder.ondataavailable = e => STATE.audioChunks.push(e.data);
+      const mimeType = pickRecorderMimeType();
+      STATE.audioChunks   = [];
+      STATE.recordMimeType = mimeType || 'audio/webm';
+      STATE.mediaRecorder  = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      STATE.mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) STATE.audioChunks.push(e.data); };
       STATE.mediaRecorder.onstop = () => uploadVoice(stream);
       STATE.mediaRecorder.start();
 
@@ -1814,7 +2070,9 @@ async function toggleRecording(btn) {
       waveform.style.opacity = '1';
       status.textContent = 'Listening… speak freely';
     } catch (e) {
-      status.textContent = 'Microphone access denied.';
+      status.textContent = e.name === 'NotAllowedError'
+        ? 'Microphone access denied — allow it in your browser settings.'
+        : `Couldn't access microphone: ${e.message}`;
     }
   } else {
     // Stop recording
@@ -1831,9 +2089,16 @@ async function uploadVoice(stream) {
   const status = document.getElementById('voiceStatus');
   if (!STATE.jwt) { status.textContent = 'Sign in to save voice journals.'; return; }
 
-  const blob    = new Blob(STATE.audioChunks, { type: 'audio/webm' });
+  if (!STATE.audioChunks.length) {
+    status.textContent = "Didn't catch any audio — try again.";
+    return;
+  }
+
+  const mimeType = STATE.recordMimeType || 'audio/webm';
+  const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+  const blob = new Blob(STATE.audioChunks, { type: mimeType });
   const formData = new FormData();
-  formData.append('audio', blob, 'journal.webm');
+  formData.append('audio', blob, `journal.${ext}`);
 
   try {
     const res = await fetch(API_BASE + '/api/v1/voice/transcribe', {
@@ -1841,16 +2106,116 @@ async function uploadVoice(stream) {
       headers: { Authorization: `Bearer ${STATE.jwt}` },
       body:    formData,
     });
-    const data = await res.json();
-    const emo  = data.emotion || {};
-    status.textContent =
-      `✓ ${data.transcript?.slice(0,60)}… · calm: ${Math.round((emo.calm||0)*100)}%, anxious: ${Math.round((emo.anxious||0)*100)}%`;
+    const data = await res.json().catch(() => ({}));
 
-    // Update SER bars
-    document.querySelector('.ser-calm')   ?.style.setProperty('width', `${Math.round((emo.calm||0)*100)}%`);
-    document.querySelector('.ser-anxiety')?.style.setProperty('width', `${Math.round((emo.anxious||0)*100)}%`);
+    if (!res.ok) {
+      const detail = typeof data.detail === 'string' ? data.detail : (data.detail?.error || res.statusText);
+      status.textContent = `Transcription failed: ${detail}`;
+      return;
+    }
+
+    const emo = data.emotion || {};
+    status.textContent = data.transcript
+      ? `✓ ${data.transcript.slice(0, 60)}${data.transcript.length > 60 ? '…' : ''} · calm: ${Math.round((emo.calm||0)*100)}%, anxious: ${Math.round((emo.anxious||0)*100)}%`
+      : '✓ Recorded (no speech detected)';
+
+    const serEl = document.getElementById('serIndicator');
+    if (serEl && data.transcript) {
+      serEl.style.display = 'flex';
+      serEl.querySelector('.ser-calm')?.style.setProperty('width', `${Math.round((emo.calm||0)*100)}%`);
+      serEl.querySelector('.ser-anxiety')?.style.setProperty('width', `${Math.round((emo.anxious||0)*100)}%`);
+    }
+
+    loadExerciseHistory('voice_journal', 'voiceHistoryList', renderVoiceHistory);
   } catch (e) {
-    status.textContent = 'Transcription failed — try again.';
+    status.textContent = `Transcription failed: ${e.message}`;
+  }
+}
+
+// ── Voice input inside an active chat session ──────────────────────────
+let chatMediaRecorder = null, chatAudioChunks = [], chatRecordMimeType = null;
+
+async function startVoiceSession() {
+  await startChatSession();
+  STATE.voiceChatMode = true;
+  toast('Tap the mic to speak your message');
+}
+
+async function toggleChatRecording(btn) {
+  const statusEl = document.getElementById('chatVoiceStatus');
+
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = "Voice input isn't supported in this browser."; }
+    return;
+  }
+
+  if (!chatMediaRecorder || chatMediaRecorder.state === 'inactive') {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = pickRecorderMimeType();
+      chatAudioChunks = [];
+      chatRecordMimeType = mimeType || 'audio/webm';
+      chatMediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      chatMediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) chatAudioChunks.push(e.data); };
+      chatMediaRecorder.onstop = () => transcribeIntoChatInput(stream);
+      chatMediaRecorder.start();
+
+      btn.textContent = '⏹️';
+      btn.classList.add('recording');
+      if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Listening…'; }
+    } catch (e) {
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.textContent = e.name === 'NotAllowedError'
+          ? 'Microphone access denied — allow it in your browser settings.'
+          : `Couldn't access microphone: ${e.message}`;
+      }
+    }
+  } else {
+    chatMediaRecorder.stop();
+    btn.textContent = '🎙️';
+    btn.classList.remove('recording');
+    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Transcribing…'; }
+  }
+}
+
+async function transcribeIntoChatInput(stream) {
+  stream.getTracks().forEach(t => t.stop());
+  const statusEl = document.getElementById('chatVoiceStatus');
+  const input = document.getElementById('chatInput');
+
+  if (!chatAudioChunks.length) {
+    if (statusEl) statusEl.textContent = "Didn't catch any audio — try again.";
+    return;
+  }
+
+  const mimeType = chatRecordMimeType || 'audio/webm';
+  const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+  const blob = new Blob(chatAudioChunks, { type: mimeType });
+  const formData = new FormData();
+  formData.append('audio', blob, `message.${ext}`);
+
+  try {
+    const res = await fetch(API_BASE + '/api/v1/voice/transcribe', {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${STATE.jwt}` },
+      body:    formData,
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      const detail = typeof data.detail === 'string' ? data.detail : (data.detail?.error || res.statusText);
+      if (statusEl) statusEl.textContent = `Transcription failed: ${detail}`;
+      return;
+    }
+
+    if (data.transcript && input) {
+      input.value = data.transcript;
+      input.focus();
+    }
+    if (statusEl) statusEl.style.display = 'none';
+  } catch (e) {
+    if (statusEl) statusEl.textContent = `Transcription failed: ${e.message}`;
   }
 }
 
@@ -1859,33 +2224,33 @@ async function uploadVoice(stream) {
 // ════════════════════════════════════════════════════════
 async function findTherapists() {
   if (!STATE.jwt) { showAuthModal('signin'); return; }
-  const city = prompt('Your city (e.g. Kanpur, Delhi, Mumbai)?') || 'Kanpur';
-  toast('Searching for therapists…');
+  const city = document.getElementById('therapistCityInput')?.value.trim() || 'Kanpur';
+  const listEl = document.getElementById('therapistResultsList');
+  if (listEl) listEl.innerHTML = `<div class="empty-state">Searching…</div>`;
   try {
     const { therapists } = await api('POST', '/api/v1/therapist/search', {
-      city, condition: STATE.condition,
+      city, condition: STATE.condition || '',
     });
     renderTherapists(therapists);
-  } catch (e) { toast('Search failed — try again', 'error'); }
+  } catch (e) {
+    if (listEl) listEl.innerHTML = `<div class="empty-state">Search failed: ${e.message}</div>`;
+  }
 }
 
 function renderTherapists(list) {
-  const container = document.querySelector('.therapist-card')?.parentElement;
-  if (!container) return;
-  container.querySelectorAll('.therapist-card').forEach(el => el.remove());
-  list.forEach(t => {
-    const div = document.createElement('div');
-    div.className = 'therapist-card';
-    div.innerHTML = `
+  const el = document.getElementById('therapistResultsList');
+  if (!el) return;
+  if (!list.length) { el.innerHTML = `<div class="empty-state">No matches found — try a different city.</div>`; return; }
+  el.innerHTML = list.map(t => `
+    <div class="therapist-card">
       <div class="t-avatar">👨‍⚕️</div>
       <div class="t-info">
         <h4>${t.name}</h4>
         <p>${t.specialty} · ${t.location} · ${t.fee}</p>
         <div class="t-tags">${(t.tags||[]).map(tag=>`<span class="t-tag">${tag}</span>`).join('')}</div>
       </div>
-      <div class="t-rating">⭐ ${t.rating}</div>`;
-    container.insertBefore(div, container.querySelector('.map-placeholder'));
-  });
+      <div class="t-rating">⭐ ${t.rating}</div>
+    </div>`).join('');
   toast(`Found ${list.length} therapists`);
 }
 
@@ -1911,15 +2276,18 @@ async function generateReport() {
 // ════════════════════════════════════════════════════════
 async function sendCrisisAlert() {
   if (!STATE.jwt) return;
-  const name  = prompt('Emergency contact name?');
-  const phone = prompt('Their phone number (with country code)?');
-  const email = prompt('Their email?');
-  if (!name || !phone || !email) return;
+  let contact = null;
+  try { contact = JSON.parse(localStorage.getItem('me_emergency_contact') || 'null'); } catch (e) {}
+  if (!contact || !contact.name || !contact.phone || !contact.email) {
+    toast('Add an emergency contact in Settings first', 'error');
+    showSection('settings', document.querySelector('[data-section=settings]'));
+    return;
+  }
   try {
     await api('POST', '/api/v1/crisis/alert', {
-      contact_name: name, contact_phone: phone, contact_email: email,
+      contact_name: contact.name, contact_phone: contact.phone, contact_email: contact.email,
     });
-    toast('Alert sent to ' + name + ' ✓');
+    toast('Alert sent to ' + contact.name + ' ✓');
   } catch (e) { toast('Alert failed — please call them directly', 'error'); }
 }
 
@@ -1953,9 +2321,8 @@ function toast(msg, type = 'ok') {
 // ════════════════════════════════════════════════════════
 let panicActive = false, breathingTimer = null, breathingStartedAt = null;
 const phases = [
-  { label: 'Breathe in', secs: 4, step: 'bs-in',   emoji: '🌿' },
-  { label: 'Hold',        secs: 4, step: 'bs-hold', emoji: '🫧' },
-  { label: 'Breathe out', secs: 4, step: 'bs-out',  emoji: '☁️' },
+  { label: 'Breathe in',  secs: 4, step: 'bs-in',  emoji: '🌿' },
+  { label: 'Breathe out', secs: 4, step: 'bs-out', emoji: '☁️' },
 ];
 let phaseIdx = 0, countdown = 4;
 
@@ -1966,11 +2333,13 @@ function togglePanic() {
     document.body.classList.add('panic-mode');
     panicPage.style.display = 'flex';
     startBreathing();
+    startSoothingAudio();
   } else {
     document.body.classList.remove('panic-mode');
     panicPage.style.display = 'none';
     document.getElementById('page-dashboard').style.display = 'block';
     stopBreathing();
+    stopSoothingAudio();
   }
 }
 
@@ -2007,23 +2376,124 @@ function tickBreath() {
   renderBreathPhase();
 }
 
-// ════════════════════════════════════════════════════════
-// HABIT TRACKER
-// ════════════════════════════════════════════════════════
-function toggleHabit(el) {
-  const checked = el.classList.toggle('checked');
-  el.querySelector('.habit-check').textContent = checked ? '✓' : '';
-  el.querySelector('.habit-muted').textContent = checked ? 'Done today' : 'Not yet';
-  const done = document.querySelectorAll('.habit-item.checked').length;
-  if (done === 3) {
-    const sc = document.getElementById('streakCount');
-    if (sc) sc.textContent = String(parseInt(sc.textContent || '0') + 1);
-    document.querySelector('.streak-day.today').textContent = '✓';
+// ── Soothing ambient tone (synthesised, no audio file needed) ──────────
+let soothingCtx = null, soothingNodes = null;
+
+function startSoothingAudio() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    soothingCtx = new Ctx();
+    const master = soothingCtx.createGain();
+    master.gain.value = 0;
+    master.connect(soothingCtx.destination);
+
+    // Two soft, slightly detuned low sine tones for a warm ambient pad
+    const freqs = [130.81, 164.81]; // C3 + E3, a calm major third
+    const oscGains = freqs.map(freq => {
+      const osc = soothingCtx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const g = soothingCtx.createGain();
+      g.gain.value = 0.5;
+      osc.connect(g).connect(master);
+      osc.start();
+      return { osc, g };
+    });
+
+    // Slow LFO breathing swell in the master gain, synced roughly to breath pace
+    const lfo = soothingCtx.createOscillator();
+    lfo.frequency.value = 1 / 8; // one full swell every ~8s (in+out cycle)
+    const lfoGain = soothingCtx.createGain();
+    lfoGain.gain.value = 0.06;
+    lfo.connect(lfoGain).connect(master.gain);
+    lfo.start();
+
+    master.gain.setTargetAtTime(0.12, soothingCtx.currentTime, 1.2); // gentle fade in
+
+    soothingNodes = { master, oscGains, lfo };
+  } catch (e) {
+    // Audio is a nice-to-have — never block panic mode over it
+    console.warn('Soothing audio unavailable:', e.message);
   }
-  // Log as an exercise if it's the breathing habit
-  if (checked && STATE.jwt && el.id === 'h3') {
-    api('POST', '/api/v1/exercise', { type: 'breathing', duration_secs: 0 }).catch(() => {});
+}
+
+function stopSoothingAudio() {
+  if (!soothingCtx) return;
+  const ctx = soothingCtx, nodes = soothingNodes;
+  soothingCtx = null; soothingNodes = null;
+  try {
+    nodes.master.gain.setTargetAtTime(0, ctx.currentTime, 0.4);
+    setTimeout(() => ctx.close().catch(() => {}), 900);
+  } catch (e) { /* ignore */ }
+}
+
+// ── Draggable floating panic button (AssistiveTouch-style) ─────────────
+function initPanicButtonDrag() {
+  const btn = document.getElementById('panicBtn');
+  if (!btn) return;
+  const MARGIN = 8;
+  const CLICK_THRESHOLD = 6; // px of movement below which a release counts as a tap
+
+  function clamp(x, y) {
+    const w = btn.offsetWidth, h = btn.offsetHeight;
+    return {
+      x: Math.min(Math.max(x, MARGIN), window.innerWidth  - w - MARGIN),
+      y: Math.min(Math.max(y, MARGIN), window.innerHeight - h - MARGIN),
+    };
   }
+
+  function setPosition(x, y, save) {
+    const p = clamp(x, y);
+    btn.style.left = p.x + 'px';
+    btn.style.top  = p.y + 'px';
+    btn.style.right = 'auto';
+    btn.style.bottom = 'auto';
+    if (save) {
+      try { localStorage.setItem('me_panic_pos', JSON.stringify(p)); } catch (e) {}
+    }
+  }
+
+  // Restore last position, or default to bottom-right like before
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('me_panic_pos') || 'null'); } catch (e) {}
+  if (saved) {
+    setPosition(saved.x, saved.y, false);
+  } else {
+    setPosition(window.innerWidth - 84, window.innerHeight - 84, false);
+  }
+
+  let dragging = false, moved = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+
+  btn.addEventListener('pointerdown', (e) => {
+    dragging = true; moved = false;
+    startX = e.clientX; startY = e.clientY;
+    startLeft = btn.offsetLeft; startTop = btn.offsetTop;
+    btn.classList.add('dragging');
+    btn.setPointerCapture(e.pointerId);
+  });
+
+  btn.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    if (Math.abs(dx) > CLICK_THRESHOLD || Math.abs(dy) > CLICK_THRESHOLD) moved = true;
+    setPosition(startLeft + dx, startTop + dy, false);
+  });
+
+  btn.addEventListener('pointerup', (e) => {
+    if (!dragging) return;
+    dragging = false;
+    btn.classList.remove('dragging');
+    try { btn.releasePointerCapture(e.pointerId); } catch (err) {}
+    if (moved) {
+      setPosition(btn.offsetLeft, btn.offsetTop, true); // persist final drag position
+    } else {
+      togglePanic(); // it was a tap, not a drag
+    }
+  });
+
+  // Keep it on-screen if the window is resized/rotated
+  window.addEventListener('resize', () => setPosition(btn.offsetLeft, btn.offsetTop, true));
 }
 
 // ════════════════════════════════════════════════════════
@@ -2069,6 +2539,7 @@ function switchMode(btn, mode) {
 // ════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
   loadState();
+  initPanicButtonDrag();
 
   // "Get Started" / "Sign In" → check JWT
   document.querySelectorAll('[onclick="showPage(\'onboarding\')"]').forEach(btn => {
@@ -2078,34 +2549,10 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.onclick = () => STATE.jwt ? showPage('dashboard') : showAuthModal('signin');
   });
 
-  // PDF report button
-  document.querySelectorAll('[onclick*="report"]').forEach(btn => {
-    btn.onclick = generateReport;
-  });
-
-  // Crisis alert button (third crisis-num button)
-  const alertBtn = document.querySelectorAll('.crisis-num')[2];
-  if (alertBtn) alertBtn.onclick = sendCrisisAlert;
-
-  // Session start buttons
-  document.querySelectorAll('.session-card .btn').forEach((btn, i) => {
-    btn.onclick = () => { STATE.sessionMode = i === 0 ? STATE.sessionMode : STATE.sessionMode; startChatSession(); };
-  });
-
-  // Mode switcher start button
-  document.querySelectorAll('.dash-card .btn-primary').forEach(btn => {
-    if (btn.textContent.includes('mode')) btn.onclick = startChatSession;
-  });
-
-  // Mood log button
-  document.querySelectorAll('.mood-bar .btn-outline').forEach(btn => {
-    btn.onclick = logMood;
-  });
-
-  // Therapist finder
-  document.querySelectorAll('[onclick*="therapist"], .nav-item').forEach(btn => {
-    if (btn.textContent.includes('Find Therapist')) btn.onclick = findTherapists;
-  });
+  // Every other button in the dashboard sections is wired directly via
+  // onclick in the HTML (startChatSession, showSection, generateReport, etc)
+  // — no global re-wiring needed here, that was a source of bugs (it was
+  // silently clobbering the voice-session button and the sidebar nav).
 
   // Service worker
   if ('serviceWorker' in navigator) {

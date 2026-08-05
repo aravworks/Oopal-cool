@@ -7,6 +7,41 @@ the user's diagnosis, name, and past session insights.
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+# Tried in order on every Gemini call. Free-tier quota is per-model-per-day,
+# so a 429 on one model doesn't mean the API key is out of quota entirely —
+# just that model. Fall through to the next one instead of failing outright.
+GEMINI_MODEL_FALLBACK_CHAIN = [
+    "gemini-flash-lite-latest",
+    "gemini-flash-latest",
+    "gemini-2.0-flash-lite",
+    "gemini-2.0-flash",
+]
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    s = str(exc)
+    return "429" in s or "RESOURCE_EXHAUSTED" in s or "quota" in s.lower()
+
+
+def generate_with_fallback(build_and_call, models: list[str] | None = None):
+    """
+    Try each model in GEMINI_MODEL_FALLBACK_CHAIN until one succeeds.
+    `build_and_call(model_name)` must construct the GenerativeModel and make
+    the actual call, returning its result. Only rate-limit errors trigger a
+    fallback to the next model — any other exception (bad prompt, auth, etc.)
+    is raised immediately since retrying with a different model won't fix it.
+    """
+    last_err = None
+    for name in (models or GEMINI_MODEL_FALLBACK_CHAIN):
+        try:
+            return build_and_call(name)
+        except Exception as e:
+            if _is_rate_limit_error(e):
+                last_err = e
+                continue
+            raise
+    raise last_err
+
 
 def get_time_context(timezone_name: str = "Asia/Kolkata") -> dict:
     """Current day/time in the user's timezone, for calibrating session tone."""

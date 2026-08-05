@@ -6,6 +6,7 @@ Two-layer detection: fast keyword scan → Gemini intent classifier.
 
 import os
 import google.generativeai as genai
+from gemini_system_prompt import generate_with_fallback
 
 # ── Keyword list ──────────────────────────────────────────────────────────────
 # English + common Hinglish crisis phrases
@@ -52,7 +53,6 @@ def classify_intent(text: str) -> dict:
     Returns {"crisis": bool, "confidence": float}
     """
     try:
-        model = genai.GenerativeModel("gemini-flash-latest")
         prompt = f"""You are a safety classifier for a mental health app.
 Analyse the message below and answer ONLY with one of these three words:
   CRISIS     — message contains suicidal ideation, self-harm intent, or imminent danger
@@ -62,7 +62,7 @@ Analyse the message below and answer ONLY with one of these three words:
 Message: "{text}"
 
 Your answer (one word only):"""
-        resp = model.generate_content(prompt)
+        resp = generate_with_fallback(lambda name: genai.GenerativeModel(name).generate_content(prompt))
         label = resp.text.strip().upper().split()[0]
         return {
             "crisis":     label == "CRISIS",
